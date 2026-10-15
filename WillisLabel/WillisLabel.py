@@ -13,7 +13,7 @@ from slicer.ScriptedLoadableModule import (
     ScriptedLoadableModuleTest,
 )
 
-from WillisLabelLib import anatomy, core
+from WillisLabelLib import anatomy, core, topcow
 
 
 #
@@ -117,6 +117,16 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.seedsWidget.markupsSelectorComboBox().nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
         f.addRow(self.seedsWidget)
 
+        self.topcowSelector = slicer.qMRMLNodeComboBox()
+        self.topcowSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode"]
+        self.topcowSelector.addEnabled = False; self.topcowSelector.noneEnabled = True
+        self.topcowSelector.setMRMLScene(slicer.mrmlScene)
+        self.topcowSelector.setToolTip(
+            "Optional: a TopCoW multiclass circle-of-Willis segmentation (load the output .mha/.nii.gz "
+            "as a label map). Its classes are used as automatic seeds; P1/P2 and A1/A2 are split at the "
+            "PComA/AComA junctions. Add manual seeds only for vessels TopCoW does not label (VA, SCA, AICA, PICA).")
+        f.addRow("TopCoW labels (optional):", self.topcowSelector)
+
         # ---- 3. Label
         box = ctk.ctkCollapsibleButton(); box.text = "3. Label arteries"
         self.layout.addWidget(box); f = qt.QFormLayout(box)
@@ -210,11 +220,13 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         vol = self.inputSelector.currentNode()
         mask = self.maskSelector.currentNode()
         seeds = self.seedsWidget.currentNode()
-        if vol is None or mask is None or seeds is None:
-            slicer.util.errorDisplay("Select the TOF volume, the artery mask and the seed list.")
+        tc = self.topcowSelector.currentNode()
+        if vol is None or mask is None or (seeds is None and tc is None):
+            slicer.util.errorDisplay("Select the TOF volume, the artery mask and a seed list and/or TopCoW labels.")
             return
         with slicer.util.tryWithErrorDisplay("Labelling failed.", waitCursor=True):
-            seg, report = self.logic.labelArteries(vol, mask, seeds, fixOrigins=self.fixOriginsCheck.checked)
+            seg, report = self.logic.labelArteries(vol, mask, seeds, fixOrigins=self.fixOriginsCheck.checked,
+                                                   topcowNode=tc)
             self.labelSegNode = seg
             self.resultText.setPlainText(report)
 
@@ -293,14 +305,37 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         finally:
             slicer.mrmlScene.RemoveNode(lab)
 
-    def labelArteries(self, volumeNode, maskSegNode, seedNode, fixOrigins=True):
+    def labelmapOnGrid(self, labelNode, volumeNode):
+        """Label map values resampled (nearest neighbour) onto the volume's voxel grid."""
+        a = vtk.vtkMatrix4x4(); b = vtk.vtkMatrix4x4()
+        labelNode.GetIJKToRASMatrix(a); volumeNode.GetIJKToRASMatrix(b)
+        same = labelNode.GetImageData().GetDimensions() == volumeNode.GetImageData().GetDimensions() and all(
+            abs(a.GetElement(r, c) - b.GetElement(r, c)) < 1e-4 for r in range(4) for c in range(4))
+        if same and labelNode.GetParentTransformNode() is None:
+            return slicer.util.arrayFromVolume(labelNode).astype(np.uint8)
+        out = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
+        try:
+            params = {"inputVolume": labelNode.GetID(), "referenceVolume": volumeNode.GetID(),
+                      "outputVolume": out.GetID(), "pixelType": "uchar", "interpolationMode": "NearestNeighbor"}
+            slicer.cli.runSync(slicer.modules.brainsresample, None, params)
+            return slicer.util.arrayFromVolume(out).astype(np.uint8).copy()
+        finally:
+            slicer.mrmlScene.RemoveNode(out)
+
+    def labelArteries(self, volumeNode, maskSegNode, seedNode, fixOrigins=True, topcowNode=None):
         t0 = time.time()
         img = slicer.util.arrayFromVolume(volumeNode)
         mask = self.maskArray(maskSegNode, volumeNode)
         spacing = self._spacingKJI(volumeNode)
-        raw = self.seedsKJI(seedNode, volumeNode)
-        if not raw:
-            raise ValueError("No seed points have been placed.")
+        raw = self.seedsKJI(seedNode, volumeNode) if seedNode is not None else {}
+        tcNotes, tcVariants, tcSeeds = [], None, {}
+        if topcowNode is not None:
+            tc = self.labelmapOnGrid(topcowNode, volumeNode)
+            mask = mask | (tc > 0)
+            tcSeeds, _, tcNotes = topcow.seeds_from_topcow(tc, spacing)
+            tcVariants = topcow.variant_summary(tc)
+        if not raw and not tcSeeds:
+            raise ValueError("No seed points have been placed and no TopCoW labels were given.")
         rad = tuple(max(1, int(round(2.0 / s))) for s in spacing)  # search 2 mm around each seed
         seeds, lost = {}, []
         for name, pts in raw.items():
@@ -310,11 +345,13 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
                     lost.append(name)
                 else:
                     seeds.setdefault(name, []).append(q)
+        for name, pts in tcSeeds.items():
+            seeds.setdefault(name, []).extend(pts)
         lab, names, _ = core.label_from_seeds(mask, seeds, spacing)
         fixReport = {}
         if fixOrigins:
             lab, fixReport = core.fix_branch_origins(lab, mask, names, anatomy.parents(), spacing,
-                                                    si_axis=self._siAxisKJI(volumeNode))
+                                                    si_axis=self._siAxisKJI(volumeNode), other_branches=True)
 
         seg = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "Labelled arteries")
         seg.SetReferenceImageGeometryParameterFromVolumeNode(volumeNode)
@@ -337,8 +374,16 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         seg.CreateClosedSurfaceRepresentation()
         maskSegNode.GetDisplayNode().SetVisibility(False)
 
-        notPlaced = [a[0] for a in anatomy.ARTERIES if a[0] not in raw]
+        notPlaced = [a[0] for a in anatomy.ARTERIES if a[0] not in seeds
+                     and not (a[0] in ("PCA R", "PCA L", "ACA R", "ACA L", "A2 3rd"))]
         lines.append("")
+        if tcVariants is not None:
+            seen = lambda k: "visualised" if tcVariants[k] else "NOT visualised"
+            lines.append("Circle of Willis (from TopCoW labels):")
+            for k in ("A1 R", "A1 L", "AComA", "3rd A2", "PComA R", "PComA L", "P1 R", "P1 L"):
+                lines.append(f"  {k}: {seen(k)}")
+            lines.extend(tcNotes)
+            lines.append("")
         if lost:
             lines.append("Seeds outside the mask (ignored): " + ", ".join(sorted(set(lost))))
         if notPlaced:
