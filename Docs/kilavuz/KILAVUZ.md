@@ -13,7 +13,7 @@ Slicer sürümü: 3D Slicer 5.12.3.
 
 Açılan pencerede dıştaki `SlicerWillisLabel` klasörünü değil, onun **içindeki `WillisLabel` klasörünü** seçin. Doğru klasörün içinde `WillisLabel.py` dosyası ve `WillisLabelLib` klasörü bulunur. Örnek:
 
-`C:\Users\LENOVO\Desktop\eda_yilmaz_TOF-flair\SlicerWillisLabel\WillisLabel`
+`C:\Users\LENOVO\Desktop\SlicerWillisLabel\WillisLabel`
 
 **OK** deyip Slicer'ı kapatıp yeniden açın.
 
