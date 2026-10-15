@@ -97,13 +97,21 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         box = ctk.ctkCollapsibleButton(); box.text = "2. Place seeds"
         self.layout.addWidget(box); f = qt.QFormLayout(box)
         info = qt.QLabel(
-            "Create the seed list, then place one point inside each visible artery "
-            "(click the point in the list, then in a view). Unplaced points are ignored. "
-            "To add more points to an artery, add a point with the same label (e.g. 'MCA R').")
+            "Choose an artery, press 'Place', then click on that artery in the 3D view or a slice. "
+            "Placing stays on: choose the next artery and keep clicking. Skip arteries that are not visible. "
+            "Several points with the same name are allowed. Press Esc or right-click to stop placing.")
         info.wordWrap = True
         f.addRow(info)
-        self.createSeedsButton = qt.QPushButton("Create seed list")
-        f.addRow(self.createSeedsButton)
+        self.arteryCombo = qt.QComboBox()
+        for abbr, latin, *_ in anatomy.ARTERIES:
+            self.arteryCombo.addItem(f"{abbr}  –  {latin}", abbr)
+        f.addRow("Artery:", self.arteryCombo)
+        row = qt.QHBoxLayout()
+        self.placeButton = qt.QPushButton("Place")
+        self.placeButton.toolTip = "Start placing points named after the selected artery"
+        self.createSeedsButton = qt.QPushButton("New seed list")
+        row.addWidget(self.placeButton); row.addWidget(self.createSeedsButton)
+        f.addRow(row)
         self.seedsWidget = slicer.qSlicerSimpleMarkupsWidget()
         self.seedsWidget.setMRMLScene(slicer.mrmlScene)
         self.seedsWidget.markupsSelectorComboBox().nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
@@ -135,6 +143,8 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.suggestButton.connect("clicked()", self.onSuggest)
         self.extractButton.connect("clicked()", self.onExtract)
         self.createSeedsButton.connect("clicked()", self.onCreateSeeds)
+        self.placeButton.connect("clicked()", self.onPlace)
+        self.arteryCombo.connect("currentIndexChanged(int)", self.onArteryChanged)
         self.labelButton.connect("clicked()", self.onLabel)
         self.exportButton.connect("clicked()", self.onExport)
         self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputChanged)
@@ -173,6 +183,28 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
     def onCreateSeeds(self):
         node = self.logic.createSeedList(self.SEED_LIST_NAME)
         self.seedsWidget.setCurrentNode(node)
+        return node
+
+    def _seedNode(self):
+        node = self.seedsWidget.currentNode()
+        if node is None:
+            node = self.onCreateSeeds()
+        return node
+
+    def onArteryChanged(self, index):
+        node = self.seedsWidget.currentNode()
+        if node is not None:
+            node.SetControlPointLabelFormat(self.arteryCombo.currentData)
+
+    def onPlace(self):
+        node = self._seedNode()
+        node.SetControlPointLabelFormat(self.arteryCombo.currentData)
+        selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+        selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+        selectionNode.SetActivePlaceNodeID(node.GetID())
+        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+        interactionNode.SetPlaceModePersistence(1)
+        interactionNode.SetCurrentInteractionMode(interactionNode.Place)
 
     def onLabel(self):
         vol = self.inputSelector.currentNode()
@@ -236,12 +268,6 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         if node is None or not node.IsA("vtkMRMLMarkupsFiducialNode"):
             node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", name)
             node.CreateDefaultDisplayNodes()
-        existing = {node.GetNthControlPointLabel(i) for i in range(node.GetNumberOfControlPoints())}
-        for abbr, *_ in anatomy.ARTERIES:
-            if abbr in existing:
-                continue
-            i = node.AddControlPoint(vtk.vtkVector3d(0, 0, 0), abbr)
-            node.SetNthControlPointPositionStatus(i, slicer.vtkMRMLMarkupsNode.PositionUndefined)
         dn = node.GetDisplayNode()
         dn.SetTextScale(2.5); dn.SetGlyphScale(1.5)
         return node

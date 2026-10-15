@@ -15,7 +15,7 @@ Intended uses: anatomy teaching, 3D printing, and research on **anatomical varia
 ## Workflow
 
 1. **Extract arteries**: hysteresis thresholding (thresholds are suggested automatically from the intensity histogram), light Gaussian smoothing, removal of small islands and flat sheets (bright subcutaneous fat on TOF). The result is an ordinary segmentation, so you can refine it in Segment Editor.
-2. **Place seeds**: *Create seed list* adds one unplaced point per artery (`VA R`, `BA`, `ICA L`, `A1 R`, `AComA`, `P1 L`, `PComA R`, …). Place the ones that are visible and leave the rest unplaced. Add more points with the same label for long or tortuous arteries.
+2. **Place seeds**: choose an artery from the list (`VA R`, `BA`, `ICA L`, `A1 R`, `AComA`, `P1 L`, `PComA R`, …), press *Place* and click on it in the 3D view or a slice. Placing stays on, so choose the next artery and keep clicking. Skip arteries that are not visible. Several points with the same name are allowed for long or tortuous arteries.
 3. **Label arteries**: every artery voxel is assigned to the artery whose seeds are closest **along the vessel** (geodesic distance on the 26-connected voxel graph). A centreline-based correction then re-assigns the first millimetres of each side branch from the parent trunk (VA, BA, ICA) to the branch itself. Voxels not connected to any seed go to an `Unconnected` segment.
 4. **Export**: one STL per artery (LPS, mm).
 
