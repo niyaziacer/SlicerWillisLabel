@@ -21,6 +21,19 @@ Intended uses: anatomy teaching, 3D printing, and research on **anatomical varia
 
 Segment names use Terminologia Anatomica (Latin) with the usual abbreviation, e.g. `A. cerebri anterior dextra, pars precommunicalis (A1) [A1 R]`.
 
+Side branches that received no seed are not merged into their parent trunk. They are collected in a separate, paler segment such as `ICA R rami`.
+
+## Optional: TopCoW labels as automatic seeds
+
+A multiclass circle-of-Willis segmentation from a [TopCoW](https://topcow24.grand-challenge.org/) model can be used instead of, or together with, manual seeds. Load the model output (`.mha` / `.nii.gz`) as a **label map** and select it in *TopCoW labels (optional)*. Then:
+
+- Each TopCoW class seeds the corresponding artery. TopCoW's PCA is split into **P1/P2** at the PComA junction, and its ACA into **A1/A2** at the AComA junction.
+- The labels are propagated along the vessels to the distal branches.
+- Add manual seeds only for vessels TopCoW does not label (VA, SCA, AICA, PICA).
+- The report lists which circle-of-Willis segments are visualised: A1, AComA, third A2, PComA and P1, on each side.
+
+The TopCoW models are not distributed with this extension. They are published by the TopCoW organisers as Docker images ([Zenodo 15665435](https://zenodo.org/records/15665435)). If you use them, please cite the TopCoW challenge paper ([arXiv:2312.17670](https://arxiv.org/abs/2312.17670)).
+
 ## Notes and limitations
 
 - **"Not visualised" is not "absent".** Slow-flow or sub-millimetre vessels (often AComA or a hypoplastic PComA) may not appear on TOF. Arteries left without a seed are listed as *not seeded*, not as missing.
@@ -29,6 +42,7 @@ Segment names use Terminologia Anatomica (Latin) with the usual abbreviation, e.
 
 ## Roadmap
 
+- [x] Circle of Willis visualisation summary from TopCoW labels
 - [ ] Variation report per case: circle of Willis completeness, fetal / partial-fetal PCA, A1 hypoplasia or aplasia (left/right ratios), AComA/PComA visualisation, VA dominance, PICA origin
 - [ ] Validation on IXI TOF-MRA cases (CC BY-SA 3.0) and sample data
 - [ ] Screenshot and tutorial
