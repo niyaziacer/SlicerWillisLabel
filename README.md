@@ -42,6 +42,10 @@ The TopCoW models are not distributed with this extension. They are published by
 
 On TOF the signal of distal branches fades (in-plane saturation), so a branch can break into pieces that are not connected to the seeded tree. With *Connect faint distal branches* (on by default) each thin isolated piece is joined to the tree along its brightest route, if the new part is at most 25 mm long and brighter than 0.75 × the mask's low intensity. Thick isolated pieces (usually fat) are not joined. On IXI002 this doubled the labelled arterial volume more than 40 mm behind the AComA (515 → 988 mm³).
 
+## Superior cerebellar arteries
+
+TopCoW has no SCA class. An unseeded basilar branch is named **SCA R / SCA L** if it leaves the basilar artery at most 10 mm below the P1 junction, runs at least 6 mm laterally and does not run in front of the basilar artery. Lower basilar branches (AICA level) are not named. A manual `SCA` seed always takes precedence.
+
 ## Distal ACA: pericallosal course and median vessels
 
 After labelling, the A2 territory is analysed by **course** and **origin**. The corpus callosum is not visible on TOF, so a *pericallosal course* is approximated as reaching at least 10 mm posterior and 8 mm superior to the AComA.

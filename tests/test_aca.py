@@ -78,3 +78,23 @@ def test_single_pericallosal_artery():
     vols, rep = run(left=False)
     assert vols["Pericall R"] > 50
     assert "Tek perikallozal arter" in rep and "VARYASYON" in rep
+
+
+def test_sca_named_from_upper_basilar_branch():
+    from WillisLabelLib import sca
+    shape = (60, 60, 60)
+    parts = {
+        "BA": [(1, 15, 15), (10, 15, 15)],
+        "P1 R": [(10, 15, 15), (10.5, 16, 8)],
+        "P1 L": [(10, 15, 15), (10.5, 16, 22)],
+        # just below the bifurcation, running to the left and backwards: SCA L
+        "BA rami": [(8.5, 15, 15), (8, 16.5, 21), (7.5, 20, 24)],
+    }
+    lab = np.zeros(shape, np.uint8)
+    names = list(parts)
+    for i, (n, pts) in enumerate(parts.items()):
+        m = tube(shape, pts, r=0.8)
+        lab[m & (lab == 0)] = i + 1
+    lab2, names2, lines = sca.name_sca(lab, names, SP, POST, SUP, np.array([0.0, 0.0, 1.0]))
+    assert "SCA L" in names2 and (lab2 == names2.index("SCA L") + 1).sum() > 20
+    assert any("SCA R: not identified" in ln for ln in lines)

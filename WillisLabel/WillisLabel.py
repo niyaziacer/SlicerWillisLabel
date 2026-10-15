@@ -13,7 +13,7 @@ from slicer.ScriptedLoadableModule import (
     ScriptedLoadableModuleTest,
 )
 
-from WillisLabelLib import aca, anatomy, core, topcow
+from WillisLabelLib import aca, anatomy, core, sca, topcow
 
 
 #
@@ -267,11 +267,12 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
 
     @staticmethod
     def _postSupKJI(volumeNode):
-        """Unit vectors (array axes k,j,i in mm) pointing posterior and superior."""
+        """Unit vectors (array axes k,j,i in mm) pointing posterior, superior and left."""
         m = vtk.vtkMatrix4x4(); volumeNode.GetIJKToRASDirectionMatrix(m)
         post = np.array([-m.GetElement(1, 2 - a) for a in range(3)])
         sup = np.array([m.GetElement(2, 2 - a) for a in range(3)])
-        return post, sup
+        left = np.array([-m.GetElement(0, 2 - a) for a in range(3)])
+        return post, sup, left
 
     # ------------------------------------------------------------- extraction
     def extractArteries(self, volumeNode, low, high, sigma=0.5, minSize=30.0):
@@ -374,8 +375,9 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
                                                     distal=anatomy.DISTAL, seeds=seeds)
             lab, names, fatMm3 = core.flag_thick_rami(lab, names, mask, spacing)
 
-        post, sup = self._postSupKJI(volumeNode)
+        post, sup, left = self._postSupKJI(volumeNode)
         lab, names, acaLines = aca.classify_distal_aca(lab, names, spacing, post, sup)
+        lab, names, scaLines = sca.name_sca(lab, names, spacing, post, sup, left)
 
         seg = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "Labelled arteries")
         seg.SetReferenceImageGeometryParameterFromVolumeNode(volumeNode)
@@ -418,6 +420,9 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             lines.append(f"Gap bridging: {bridgeRep['joined']} of {bridgeRep['fragments']} isolated fragments joined "
                          f"({bridgeRep['joined_mm3']:.0f} mm³, {bridgeRep['bridge_vox']} bridge voxels); "
                          f"{bridgeRep['rejected_thick']} thick fragments (probably fat) not joined")
+        if scaLines:
+            lines.extend(scaLines)
+            lines.append("")
         if acaLines:
             lines.extend(acaLines)
             lines.append("")

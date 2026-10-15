@@ -150,6 +150,10 @@ Rapor halkanın her parçası için üç durumdan birini yazar:
 
 PComA görüntülenmezse P1/P2 ayrımı yapılamaz ve o taraf tek bir "PCA" segmenti olarak verilir.
 
+### A. superior cerebelli (SCA)
+
+TopCoW'da SCA sınıfı yoktur. Modül, baziller arterden P1 ayrımının en fazla 10 mm altından çıkan, en az 6 mm yana giden ve baziller arterin önüne geçmeyen dalı *SCA R / SCA L* olarak adlandırır (SCA, a. cerebri posterior'un hemen altından çıkar). Daha aşağıdan çıkan dallar (AICA düzeyi) adlandırılmaz. Elle `SCA` tohumu koyduysanız modül o tarafa dokunmaz. Aynı tarafta bu ölçütlere uyan birden fazla dal varsa raporda "duplicated SCA?" notu çıkar.
+
 ### Distal ACA: perikallozal seyir ve orta hat damarları
 
 Etiketlemeden sonra modül A2 bölgesini ayrıca inceler (TopCoW kullanılsın ya da kullanılmasın):
