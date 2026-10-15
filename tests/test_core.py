@@ -84,3 +84,20 @@ def test_variant_states():
     assert v["P1 R"] == topcow.VISUALISED
     assert v["PComA R"] == topcow.PARTIAL
     assert v["AComA"] == topcow.ABSENT
+
+
+def test_bridge_fragments_joins_faint_thin_branch_not_blob():
+    img = np.full((40, 40, 80), 20.0, np.float32)
+    trunk = np.zeros(img.shape, bool); trunk[19:22, 19:22, 0:30] = True
+    faint = np.zeros(img.shape, bool); faint[20, 20, 30:40] = True        # faint gap
+    branch = np.zeros(img.shape, bool); branch[19:21, 19:21, 40:60] = True  # thin distal piece
+    blob = np.zeros(img.shape, bool); blob[2:10, 2:10, 60:68] = True       # thick isolated blob
+    bridge_to_blob = np.zeros(img.shape, bool); bridge_to_blob[5, 5:20, 30] = True
+    img[trunk | branch | blob] = 100.0
+    img[faint | bridge_to_blob] = 80.0   # below the mask but above 0.75 x its low intensity
+    mask = trunk | branch | blob
+    new, rep = core.bridge_fragments(img, mask, [(20, 20, 5)], (1, 1, 1), sigma_mm=0)
+    lab, n = __import__("scipy.ndimage", fromlist=["label"]).label(new, structure=np.ones((3, 3, 3)))
+    assert lab[20, 20, 5] == lab[20, 20, 50]          # branch joined
+    assert lab[5, 5, 64] != lab[20, 20, 5]            # blob not joined
+    assert rep["joined"] == 1 and rep["rejected_thick"] == 1

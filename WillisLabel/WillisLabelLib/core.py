@@ -137,6 +137,82 @@ def snap_to_mask(mask, image, ijk, radius_vox=(4, 4, 4)):
 
 
 # ---------------------------------------------------------------------------
+# 2b. Bridging gaps to faint distal branches
+# ---------------------------------------------------------------------------
+def bridge_fragments(image, mask, seed_points, spacing, bridge_frac=0.75, max_gap_mm=25.0,
+                     max_radius_mm=1.3, search_mm=20.0, sigma_mm=0.5):
+    """Connect isolated vessel fragments to the seeded tree through faint vessel segments.
+
+    On TOF the signal of distal branches fades (in-plane saturation), so a branch can be
+    split into pieces that are not connected to the seeded tree. For each such fragment the
+    brightest route to the tree is traced (cost grows steeply as intensity falls) through voxels
+    brighter than ``bridge_frac`` x the mask's low intensity. The route is added to the mask if
+    its new part is at most ``max_gap_mm`` long. Thick fragments (95th-percentile radius
+    > ``max_radius_mm``) are not bridged: distal branches are thin, thick isolated pieces are
+    usually fat.
+
+    Returns (new_mask, report dict).
+    """
+    spacing = np.asarray(spacing, float)
+    rep = dict(fragments=0, joined=0, joined_mm3=0.0, rejected_thick=0, bridge_vox=0)
+    comp, n = ndi.label(mask, structure=STRUCT26)
+    sp_ = np.asarray(seed_points, int).reshape(-1, 3)
+    seeded = np.unique(comp[tuple(sp_.T)]) if len(sp_) else np.array([], int)
+    seeded = seeded[seeded > 0]
+    if n == 0 or not len(seeded):
+        return mask, rep
+    tree = np.isin(comp, seeded)
+    frag = mask & ~tree
+    if not frag.any():
+        return mask, rep
+    s = ndi.gaussian_filter(image.astype(np.float32), sigma=sigma_mm / spacing) if sigma_mm > 0 else image
+    low = float(np.percentile(s[mask], 5))
+    fc, fn = ndi.label(frag, structure=STRUCT26)
+    rep["fragments"] = int(fn)
+    edt = ndi.distance_transform_edt(mask, sampling=spacing)
+    ok = np.zeros(fn + 1, bool)
+    for k, sl in enumerate(ndi.find_objects(fc), start=1):
+        r = edt[sl][fc[sl] == k]
+        ok[k] = np.percentile(r, 95) <= max_radius_mm
+    rep["rejected_thick"] = int(fn - ok[1:].sum())
+    good = ok[fc]
+    if not good.any():
+        return mask, rep
+    dfrag = ndi.distance_transform_edt(~good, sampling=spacing)
+    R = ((s >= bridge_frac * low) | mask) & (dfrag <= search_mm) & ~(frag & ~good)
+    g = VoxelGraph(R, spacing, node_weight=np.clip(low / np.maximum(s[tuple(np.argwhere(R).T)], 1e-3), 0.5, None) ** 4)
+    src = np.nonzero(tree[tuple(g.coords.T)])[0]
+    if not len(src):
+        return mask, rep
+    dist, pred, _ = csgraph.dijkstra(g.graph, directed=False, indices=src, min_only=True, return_predecessors=True)
+    fid = fc[tuple(g.coords.T)]
+    add = np.zeros(mask.shape, bool)
+    vox = float(np.prod(spacing))
+    for k in np.nonzero(ok)[0]:
+        if k == 0:
+            continue
+        idx = np.nonzero(fid == k)[0]
+        if not len(idx):
+            continue
+        i = idx[np.argmin(dist[idx])]
+        if not np.isfinite(dist[i]):
+            continue
+        path = [i]
+        while pred[path[-1]] >= 0:
+            path.append(pred[path[-1]])
+        P = g.coords[path]
+        gap = P[~mask[tuple(P.T)]]
+        if len(gap) * float(spacing.mean()) > max_gap_mm:
+            continue
+        add[tuple(gap.T)] = True
+        rep["joined"] += 1
+        rep["joined_mm3"] += float((fc == k).sum() * vox)
+    add = ndi.binary_dilation(add, STRUCT26) & ((s >= bridge_frac * low) | mask)
+    rep["bridge_vox"] = int((add & ~mask).sum())
+    return mask | add, rep
+
+
+# ---------------------------------------------------------------------------
 # 3. Seed-based geodesic labelling
 # ---------------------------------------------------------------------------
 def label_from_seeds(mask, seeds, spacing, graph=None):

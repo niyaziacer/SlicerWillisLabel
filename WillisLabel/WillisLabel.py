@@ -135,6 +135,11 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.fixOriginsCheck = qt.QCheckBox("Colour branches from their origin (centreline correction)")
         self.fixOriginsCheck.checked = True
         f.addRow(self.fixOriginsCheck)
+        self.bridgeCheck = qt.QCheckBox("Connect faint distal branches (bridge gaps)")
+        self.bridgeCheck.checked = True
+        self.bridgeCheck.setToolTip("On TOF distal branches fade and break into pieces. Thin pieces are joined to "
+                                    "the tree along their brightest route (max 25 mm). The report lists how many.")
+        f.addRow(self.bridgeCheck)
         self.labelButton = qt.QPushButton("Label arteries")
         f.addRow(self.labelButton)
         self.resultText = qt.QPlainTextEdit(); self.resultText.readOnly = True
@@ -227,7 +232,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             slicer.util.errorDisplay("Select the TOF volume, the artery mask and a seed list and/or TopCoW labels.")
             return
         with slicer.util.tryWithErrorDisplay("Labelling failed.", waitCursor=True):
-            seg, report = self.logic.labelArteries(vol, mask, seeds, fixOrigins=self.fixOriginsCheck.checked,
+            seg, report = self.logic.labelArteries(vol, mask, seeds, fixOrigins=self.fixOriginsCheck.checked, bridge=self.bridgeCheck.checked,
                                                    topcowNode=tc)
             self.labelSegNode = seg
             self.resultText.setPlainText(report)
@@ -332,7 +337,7 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         finally:
             slicer.mrmlScene.RemoveNode(out)
 
-    def labelArteries(self, volumeNode, maskSegNode, seedNode, fixOrigins=True, topcowNode=None):
+    def labelArteries(self, volumeNode, maskSegNode, seedNode, fixOrigins=True, topcowNode=None, bridge=True):
         t0 = time.time()
         img = slicer.util.arrayFromVolume(volumeNode)
         mask = self.maskArray(maskSegNode, volumeNode)
@@ -357,6 +362,10 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
                     seeds.setdefault(name, []).append(q)
         for name, pts in tcSeeds.items():
             seeds.setdefault(name, []).extend(pts)
+        bridgeRep = None
+        if bridge:
+            allPts = [p for pts in seeds.values() for p in pts]
+            mask, bridgeRep = core.bridge_fragments(img, mask, allPts, spacing)
         lab, names, _ = core.label_from_seeds(mask, seeds, spacing)
         fixReport = {}
         if fixOrigins:
@@ -401,6 +410,10 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
                 lines.append(f"  {k}: {tcVariants[k]}")
             lines.extend(tcNotes)
             lines.append("")
+        if bridgeRep and bridgeRep["fragments"]:
+            lines.append(f"Gap bridging: {bridgeRep['joined']} of {bridgeRep['fragments']} isolated fragments joined "
+                         f"({bridgeRep['joined_mm3']:.0f} mm³, {bridgeRep['bridge_vox']} bridge voxels); "
+                         f"{bridgeRep['rejected_thick']} thick fragments (probably fat) not joined")
         if acaLines:
             lines.extend(acaLines)
             lines.append("")
