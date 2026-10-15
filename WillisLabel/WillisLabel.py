@@ -367,10 +367,12 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             allPts = [p for pts in seeds.values() for p in pts]
             mask, bridgeRep = core.bridge_fragments(img, mask, allPts, spacing)
         lab, names, _ = core.label_from_seeds(mask, seeds, spacing)
-        fixReport = {}
+        fixReport, fatMm3 = {}, 0.0
         if fixOrigins:
             lab, fixReport = core.fix_branch_origins(lab, mask, names, anatomy.parents(), spacing,
-                                                    si_axis=self._siAxisKJI(volumeNode), other_branches=True)
+                                                    si_axis=self._siAxisKJI(volumeNode), other_branches=True,
+                                                    distal=anatomy.DISTAL, seeds=seeds)
+            lab, names, fatMm3 = core.flag_thick_rami(lab, names, mask, spacing)
 
         post, sup = self._postSupKJI(volumeNode)
         lab, names, acaLines = aca.classify_distal_aca(lab, names, spacing, post, sup)
@@ -410,6 +412,8 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
                 lines.append(f"  {k}: {tcVariants[k]}")
             lines.extend(tcNotes)
             lines.append("")
+        if fatMm3:
+            lines.append(f"Thick side pieces moved to 'Non-vascular?' (probably fat): {fatMm3:.0f} mm³")
         if bridgeRep and bridgeRep["fragments"]:
             lines.append(f"Gap bridging: {bridgeRep['joined']} of {bridgeRep['fragments']} isolated fragments joined "
                          f"({bridgeRep['joined_mm3']:.0f} mm³, {bridgeRep['bridge_vox']} bridge voxels); "

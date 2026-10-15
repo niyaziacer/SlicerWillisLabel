@@ -266,7 +266,12 @@ def classify_distal_aca(lab, names, spacing, post_vec, sup_vec):
         lines.append(txt)
         for nt in v["notes"]:
             lines.append(f"    {nt}")
+        seen = set()
         for b in v["branches"]:
+            key = (round(b["split_post_mm"]), round(b["split_sup_mm"]))
+            if key in seen:
+                continue
+            seen.add(key)
             lines.append(f"    higher posterior branch from it at {b['split_post_mm']:.0f} mm posterior / "
                          f"{b['split_sup_mm']:.0f} mm superior, shown as {v['rami']} (not named)")
         if v["variation"]:

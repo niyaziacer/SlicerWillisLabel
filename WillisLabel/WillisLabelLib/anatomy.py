@@ -51,6 +51,8 @@ ARTERIES = [
 DERIVED = ("Pericall R", "Pericall L", "A2 R var", "A2 L var", "CallMed", "ACA var")
 NOT_SEEDED = ("PCA R", "PCA L", "ACA R", "ACA L", "A2 3rd") + DERIVED
 
+NON_VASCULAR = ("Non-vascular?", "Probably not an artery (thick piece, e.g. fat)", (0.75, 0.65, 0.50))
+
 UNCONNECTED = ("Unconnected", "Not connected to any seed", (0.6, 0.6, 0.6))
 
 BY_ABBR = {a[0]: a for a in ARTERIES}
@@ -60,6 +62,8 @@ RAMI = " rami"
 
 
 def segment_name(abbr):
+    if abbr == NON_VASCULAR[0]:
+        return f"{NON_VASCULAR[1]} [{abbr}]"
     if abbr.endswith(RAMI):
         base = BY_ABBR.get(abbr[: -len(RAMI)])
         return f"{base[1]} – rami alii [{abbr}]" if base else abbr
@@ -76,12 +80,22 @@ _FALLBACK = [
 
 def colour(abbr, index=0):
     """Catalogue colour, or a distinct fallback colour for names not in the catalogue."""
+    if abbr == NON_VASCULAR[0]:
+        return NON_VASCULAR[2]
     if abbr.endswith(RAMI):
         base = BY_ABBR.get(abbr[: -len(RAMI)])
         if base:  # washed-out version of the parent colour
             return tuple(0.55 + 0.35 * c for c in base[2])
     a = BY_ABBR.get(abbr)
     return a[2] if a else _FALLBACK[index % len(_FALLBACK)]
+
+
+# named distal continuation of each parent trunk (used to find the distal end of its centreline)
+DISTAL = {
+    "VA R": ("BA",), "VA L": ("BA",),
+    "BA": ("P1 R", "P1 L", "PCA R", "PCA L"),
+    "ICA R": ("A1 R", "ACA R", "MCA R"), "ICA L": ("A1 L", "ACA L", "MCA L"),
+}
 
 
 def parents():

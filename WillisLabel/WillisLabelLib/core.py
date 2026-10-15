@@ -212,6 +212,33 @@ def bridge_fragments(image, mask, seed_points, spacing, bridge_frac=0.75, max_ga
     return mask | add, rep
 
 
+def flag_thick_rami(lab, names, mask, spacing, max_radius_mm=1.8, min_mm3=50.0, label="Non-vascular?"):
+    """Move thick, unseeded side pieces (``... rami``) to a separate 'Non-vascular?' label.
+
+    Unseeded side branches of a trunk are thin; a thick piece hanging on a trunk is usually fat
+    (orbit, skull base), which is bright on TOF. Returns (lab, names, moved_mm3).
+    """
+    spacing = np.asarray(spacing, float)
+    vals = [i + 1 for i, n in enumerate(names) if n.endswith(" rami")]
+    if not vals:
+        return lab, names, 0.0
+    R = np.isin(lab, vals)
+    edt = ndi.distance_transform_edt(mask, sampling=spacing)
+    comp, n = ndi.label(R, structure=STRUCT26)
+    vox = float(np.prod(spacing))
+    moved = 0.0
+    for k, sl in enumerate(ndi.find_objects(comp), start=1):
+        c = comp[sl] == k
+        v = c.sum() * vox
+        if v < min_mm3 or np.percentile(edt[sl][c], 95) <= max_radius_mm:
+            continue
+        if label not in names:
+            names.append(label)
+        lab[sl][c] = names.index(label) + 1
+        moved += v
+    return lab, names, moved
+
+
 # ---------------------------------------------------------------------------
 # 3. Seed-based geodesic labelling
 # ---------------------------------------------------------------------------
@@ -240,7 +267,8 @@ def label_from_seeds(mask, seeds, spacing, graph=None):
 # ---------------------------------------------------------------------------
 # 4. Branch-origin correction ("stub fix")
 # ---------------------------------------------------------------------------
-def fix_branch_origins(lab, mask, names, parents, spacing, margin_mm=0.5, si_axis=2, other_branches=False):
+def fix_branch_origins(lab, mask, names, parents, spacing, margin_mm=0.5, si_axis=2, other_branches=False,
+                       distal=None, max_stub_mm=8.0, seeds=None):
     """Give the first millimetres of each branch to the branch, not the parent.
 
     For each parent artery a centreline is traced between its lowest and highest
@@ -266,11 +294,46 @@ def fix_branch_origins(lab, mask, names, parents, spacing, margin_mm=0.5, si_axi
         w = 1.0 / (Ec[tuple(J.T)] + 0.15) ** 2
         g = VoxelGraph(Pc, spacing, node_weight=w)
 
+        band = max(1, int(round(3.0 / spacing[si_axis])))  # 3 mm
+
         def endpoint(kk):
-            S = J[J[:, si_axis] == kk]
+            # thickest voxel within 3 mm of the lowest / highest level: the trunk, not a small
+            # branch that happens to reach that level
+            S = J[np.abs(J[:, si_axis] - kk) < band]
             return int(g.index[tuple(S[np.argmax(Ec[tuple(S.T)])])])
 
-        a = endpoint(J[:, si_axis].min()); b = endpoint(J[:, si_axis].max())
+        a = None
+        # distal end: where the parent meets its named continuation (e.g. BA -> P1, ICA -> A1/MCA).
+        # The highest point is only a fallback: it may lie in an unseeded side branch (e.g. SCA).
+        b = None
+        dn = [names.index(x) + 1 for x in (distal or {}).get(p, ()) if x in names]
+        if dn:
+            touch = Pc & ndi.binary_dilation(np.isin(lab[cr], dn), STRUCT26)
+            if touch.any():
+                T = np.argwhere(touch)
+                b = int(g.index[tuple(T[np.argmax(Ec[tuple(T.T)])])])
+        if b is None:
+            b = endpoint(J[:, si_axis].max())
+        # proximal end: the lowest point of the trunk reachable from the distal end through voxels
+        # at least half as thick as the trunk. Thin necks are not followed, so fat or a small
+        # branch attached to the trunk cannot become its "lowest point".
+        Jn = g.coords
+        r_ref = float(np.percentile(Ec[tuple(Jn.T)], 75))
+        thick = Ec[tuple(Jn.T)] >= 0.5 * r_ref
+        if thick[b]:
+            gt = VoxelGraph(Pc & (Ec >= 0.5 * r_ref), spacing)
+            bt = int(gt.index[tuple(Jn[b])])
+            dt = gt.distances([bt])
+            reach = np.isfinite(dt)
+            if reach.sum() > 1:
+                # lowest thick voxel reachable from the distal end (the trunk runs upwards;
+                # long side branches such as the SCA loop do not go below it)
+                C = gt.coords[reach]
+                lowest = C[:, si_axis].min()
+                Cl = C[np.abs(C[:, si_axis] - lowest) < band]
+                a = int(g.index[tuple(Cl[np.argmax(Ec[tuple(Cl.T)])])])
+        if a is None:
+            a = endpoint(J[:, si_axis].min())
         path = g.path(a, b)
         if path is None:
             continue
@@ -289,12 +352,18 @@ def fix_branch_origins(lab, mask, names, parents, spacing, margin_mm=0.5, si_axi
             nb = lab[sl2][ring]
             nb = nb[(nb != 0) & (nb != pv) & (nb != UNCONNECTED)]
             sub = lab[sl2]
+            # an origin stub is short; a long piece is a side branch of the parent, not the
+            # beginning of the neighbouring artery
+            ext = (np.ptp(np.argwhere(comp), axis=0) + 1) * spacing
+            if float(np.linalg.norm(ext)) > max_stub_mm:
+                nb = nb[:0]
             if len(nb) == 0:
                 if not other_branches:
                     continue
                 if other_val is None:
-                    names.append(f"{p} rami")
-                    other_val = len(names)
+                    if f"{p} rami" not in names:
+                        names.append(f"{p} rami")
+                    other_val = names.index(f"{p} rami") + 1
                 sub[comp] = other_val
             else:
                 sub[comp] = np.bincount(nb).argmax()
