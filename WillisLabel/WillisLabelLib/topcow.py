@@ -61,18 +61,35 @@ def _split_segment(lab, seg_val, prox_vals, junc_val, spacing):
     return proximal, distal
 
 
+VISUALISED = "visualised"
+PARTIAL = "partially visualised (not connected at both ends)"
+ABSENT = "NOT visualised"
+
+
+def _edge_state(lab, val, ends):
+    """State of a circle-of-Willis edge: does segment `val` exist and touch every end in `ends`?"""
+    m = lab == val
+    if not m.any():
+        return ABSENT
+    if all(_contact(lab, m, (e,)).any() for e in ends):
+        return VISUALISED
+    return PARTIAL
+
+
 def variant_summary(lab):
-    """Presence of the TopCoW variant-graph edges, as seen in the segmentation."""
-    present = lambda v: bool((lab == v).any())
+    """Circle of Willis edges as seen in the TopCoW segmentation (TopCoW variant-graph edges).
+
+    Each value is VISUALISED, PARTIAL or ABSENT. 'Not visualised' on TOF is not proof of absence.
+    """
     return {
-        "AComA": present(10),
-        "PComA R": present(8) and bool(_contact(lab, lab == 8, (2,)).any()) and bool(_contact(lab, lab == 8, (4,)).any()),
-        "PComA L": present(9) and bool(_contact(lab, lab == 9, (3,)).any()) and bool(_contact(lab, lab == 9, (6,)).any()),
-        "A1 R": present(11) and bool(_contact(lab, lab == 11, (4,)).any()),
-        "A1 L": present(12) and bool(_contact(lab, lab == 12, (6,)).any()),
-        "P1 R": present(2) and bool(_contact(lab, lab == 2, (1,)).any()),
-        "P1 L": present(3) and bool(_contact(lab, lab == 3, (1,)).any()),
-        "3rd A2": present(15),
+        "A1 R": _edge_state(lab, 11, (4,)),
+        "A1 L": _edge_state(lab, 12, (6,)),
+        "AComA": _edge_state(lab, 10, (11, 12)),
+        "3rd A2": VISUALISED if (lab == 15).any() else ABSENT,
+        "PComA R": _edge_state(lab, 8, (4, 2)),
+        "PComA L": _edge_state(lab, 9, (6, 3)),
+        "P1 R": _edge_state(lab, 2, (1,)),
+        "P1 L": _edge_state(lab, 3, (1,)),
     }
 
 

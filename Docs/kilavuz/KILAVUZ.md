@@ -86,6 +86,76 @@ Bu örnekte 12 nokta yerleştirildi: BA, ICA R/L, MCA R/L, A1 R, AComA, A2 L, P1
 
 ---
 
+## Ek: TopCoW modeliyle otomatik tohumlama (isteğe bağlı, ileri kullanıcılar için)
+
+[TopCoW](https://topcow24.grand-challenge.org/) yarışmasının modelleri Willis halkasını (ICA, MCA, A1/ACA, AComA, PComA, P1/PCA, BA, 3. A2) otomatik olarak etiketler. Willis Label bu etiketleri **otomatik tohum** olarak kullanabilir. Bu durumda Willis halkası için elle nokta koymak gerekmez; yalnızca TopCoW'un tanımadığı damarlara (VA, SCA, AICA, PICA) nokta koyulur. Rapor ayrıca halkanın her parçasının görüntülenip görüntülenmediğini yazar.
+
+> **Kurslar için öneri:** Bu bölüm Docker kurulumu gerektirir. Kurulum yarım saati bulabilir ve çoğu kursiyerin bilgisayarında Docker yoktur. Kursta en pratik yol, eğitmenin TopCoW çıktısını (`..._TopCoW` etiket haritası) önceden hazırlayıp TOF görüntüsüyle birlikte dağıtmasıdır. Kursiyer yalnızca bu dosyayı **etiket haritası** (label map) olarak yükleyip *TopCoW labels (optional)* kutusunda seçer.
+
+### Bilgisayar gereksinimleri
+
+| Gereksinim | Not |
+|---|---|
+| Windows 10/11, 64 bit, WSL 2 | Docker Desktop WSL 2 üzerinde çalışır |
+| **Docker Desktop** | Aşağıda kurulumu anlatılıyor |
+| **NVIDIA ekran kartı** (güncel sürücüyle) | Denenen: NVIDIA GeForce RTX 40 serisi dizüstü kartı. Olgu başına yaklaşık 2 dakika |
+| RAM | Denenen bilgisayarda 64 GB vardı. En az 16 GB önerilir; model 8 GB paylaşımlı bellek ayırır |
+| Boş disk alanı | En az 20 GB (7,3 GB indirme + yüklenmiş imaj yaklaşık 12 GB) |
+
+**GPU'suz çalışma denenmedi.** NVIDIA kartı olmayan bilgisayarda komut büyük olasılıkla `could not select device driver "" with capabilities: [[gpu]]` hatası verir. Betikteki `USE_GPU = True` satırı `False` yapılarak işlemcide (CPU) çalıştırma denenebilir. Bunun işe yarayıp yaramadığı ve ne kadar süreceği bilinmiyor.
+
+Ekran kartınızı görmek için: **Görev Yöneticisi → Performans → GPU**. NVIDIA kartı olan bilgisayarlarda genellikle iki GPU görünür (Intel + NVIDIA).
+
+### 1. Docker Desktop kurulumu (bir kez)
+
+1. https://www.docker.com/products/docker-desktop/ adresinden **Docker Desktop for Windows**'u indirin ve kurun.
+2. Kurulumda **"Use WSL 2 instead of Hyper-V"** seçeneği işaretli kalsın.
+3. Kurulum bitince bilgisayarı yeniden başlatın.
+4. Docker Desktop'ı açın. Sol alt köşede **"Engine running"** yazısını görmelisiniz. Docker'ın çalışması için bu pencerenin (simge durumunda da olsa) açık olması gerekir.
+
+### 2. TopCoW modelini indirme ve Docker'a yükleme (bir kez)
+
+1. DKFZ takımının modelini indirin (7,3 GB):
+   https://zenodo.org/records/15665435/files/Team_DKFZ_topcow_seg.tar.gz?download=1
+2. **PowerShell**'i açın (Başlat menüsünde "PowerShell" yazın) ve şunu yazın:
+
+   ```
+   docker image load -i "$env:USERPROFILE\Downloads\Team_DKFZ_topcow_seg.tar.gz"
+   ```
+
+   Bu işlem 5–10 dakika sürer. Sonunda `Loaded image: topcow24_ct:latest` yazmalıdır.
+3. İndirilen `.tar.gz` dosyası artık silinebilir; model Docker'ın içinde duruyor.
+
+### 3. TopCoW'u bir olguda çalıştırma
+
+1. Slicer'da TOF görüntüsünü açın ve **Willis Label** modülünde *TOF volume* olarak seçin.
+2. **View → Python Console**'a şunu yazın (yol, SlicerWillisLabel klasörünüzün yeri olmalı):
+
+   ```
+   exec(open(r"C:\Users\LENOVO\Desktop\SlicerWillisLabel\Docs\topcow_calistir.py", encoding="utf-8").read())
+   ```
+
+3. Slicer 2–3 dakika donmuş görünebilir; bu normaldir. Sonunda konsolda `TopCoW tamamlandı` yazar ve sonuç *TopCoW labels (optional)* kutusuna kendiliğinden seçilir.
+4. **Extract arteries** ve **Label arteries**'e basın. İsterseniz önce VA, SCA, AICA, PICA için elle nokta ekleyin.
+
+Ara dosyalar `C:\Users\<kullanıcı>\WillisLabel_TopCoW\` klasöründe tutulur.
+
+### Raporda Willis halkası
+
+Rapor halkanın her parçası için üç durumdan birini yazar:
+
+- **visualised**: segment görüntülenmiş ve iki ucundaki damara bağlı.
+- **partially visualised**: segment var ama iki ucuna birden bağlı değil (hipoplazi ya da segmentasyon kesintisi olabilir; görüntüden kontrol edin).
+- **NOT visualised**: segment görüntülenmemiş. TOF'ta yavaş akımlı ya da çok ince damarlar görünmeyebilir. **"Görüntülenmedi", "yok" demek değildir.**
+
+PComA görüntülenmezse P1/P2 ayrımı yapılamaz ve o taraf tek bir "PCA" segmenti olarak verilir.
+
+### Atıf
+
+TopCoW modelini kullanırsanız TopCoW yarışma makalesine atıf yapın: Yang K. ve ark., *The TopCoW Challenge – Topology-Aware Circle of Willis Segmentation for CT and MR Angiography*, arXiv:2312.17670. Modeller bu eklentiyle dağıtılmaz; TopCoW düzenleyicilerinin Zenodo kaydından indirilir.
+
+---
+
 ## Bu örnekte görülen sınırlamalar (geliştirme notu)
 
 Yukarıdaki sonuç bir **iş akışı gösterimi**dir; etiketler anatomik olarak tamamen doğru değildir:

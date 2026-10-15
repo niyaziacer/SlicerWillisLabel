@@ -374,14 +374,16 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         seg.CreateClosedSurfaceRepresentation()
         maskSegNode.GetDisplayNode().SetVisibility(False)
 
+        covered = {"P1 R": "PCA R", "P2 R": "PCA R", "P1 L": "PCA L", "P2 L": "PCA L",
+                   "A1 R": "ACA R", "A2 R": "ACA R", "A1 L": "ACA L", "A2 L": "ACA L"}
         notPlaced = [a[0] for a in anatomy.ARTERIES if a[0] not in seeds
-                     and not (a[0] in ("PCA R", "PCA L", "ACA R", "ACA L", "A2 3rd"))]
+                     and a[0] not in ("PCA R", "PCA L", "ACA R", "ACA L", "A2 3rd")
+                     and covered.get(a[0]) not in seeds]
         lines.append("")
         if tcVariants is not None:
-            seen = lambda k: "visualised" if tcVariants[k] else "NOT visualised"
-            lines.append("Circle of Willis (from TopCoW labels):")
+            lines.append("Circle of Willis (from TopCoW labels; 'not visualised' is not proof of absence):")
             for k in ("A1 R", "A1 L", "AComA", "3rd A2", "PComA R", "PComA L", "P1 R", "P1 L"):
-                lines.append(f"  {k}: {seen(k)}")
+                lines.append(f"  {k}: {tcVariants[k]}")
             lines.extend(tcNotes)
             lines.append("")
         if lost:

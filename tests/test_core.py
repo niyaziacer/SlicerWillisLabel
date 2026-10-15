@@ -72,3 +72,15 @@ def test_topcow_no_pcom_no_split():
     lab[5:35, 5, 5] = 2
     seeds, region, notes = topcow.seeds_from_topcow(lab, (1, 1, 1))
     assert "PCA R" in region and notes
+
+
+def test_variant_states():
+    from WillisLabelLib import topcow
+    lab = np.zeros((40, 12, 12), np.uint8)
+    lab[0:5, 5, 5] = 1
+    lab[5:35, 5, 5] = 2          # R-PCA touching BA
+    lab[20, 7:9, 5] = 8          # R-Pcom fragment, NOT touching PCA or ICA
+    v = topcow.variant_summary(lab)
+    assert v["P1 R"] == topcow.VISUALISED
+    assert v["PComA R"] == topcow.PARTIAL
+    assert v["AComA"] == topcow.ABSENT
