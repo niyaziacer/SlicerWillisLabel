@@ -43,7 +43,7 @@ The TopCoW models are not distributed with this extension. They are published by
 After labelling, the A2 territory is analysed by **course** and **origin**. The corpus callosum is not visible on TOF, so a *pericallosal course* is approximated as reaching at least 10 mm posterior and 8 mm superior to the AComA.
 
 - The posterior-coursing vessel of each A2 is labelled **A. pericallosa** of that side. The A2 keeps its name up to the genu, and its other (anterior / upward) branches become `A2 R rami` / `A2 L rami`.
-- A further posterior branch that leaves the pericallosal artery after the genu is reported as a possible callosomarginal artery. It is not counted as a separate vessel.
+- A further posterior branch that leaves the pericallosal artery after the genu is shown as a branch but not named, and is not counted as a separate vessel.
 - A third posterior-coursing vessel is named by its origin: from the AComA → **A. callosa mediana** (TA98 A12.2.07.032); from an A2 → *pericallosal variation branch* of that A2.
 - A single pericallosal artery is reported as a possible azygos or bihemispheric ACA.
 - All variation findings are flagged `VARYASYON – anatomist onayı gerekli` (variation, anatomist review required).

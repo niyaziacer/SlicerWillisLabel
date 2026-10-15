@@ -128,7 +128,7 @@ def find_pericallosal_vessels(lab, names, spacing, post_vec, sup_vec):
         v["genu"] = v["depart"] + int(np.argmin(rp[seg]))   # most anterior point = genu
         v["branches"] = []
     # Paths from one origin that separate only after the genu are branches of one vessel
-    # (e.g. pericallosa + a higher posterior branch such as the callosomarginal artery).
+    # (e.g. pericallosa + a higher posterior branch); the branch is shown but not named.
     # The lower one (closer to the corpus callosum) is kept as the vessel.
     vessels.sort(key=lambda v: v["reach_sup_mm"])
     kept = []
@@ -268,7 +268,7 @@ def classify_distal_aca(lab, names, spacing, post_vec, sup_vec):
             lines.append(f"    {nt}")
         for b in v["branches"]:
             lines.append(f"    higher posterior branch from it at {b['split_post_mm']:.0f} mm posterior / "
-                         f"{b['split_sup_mm']:.0f} mm superior (callosomarginal artery?), labelled {v['rami']}")
+                         f"{b['split_sup_mm']:.0f} mm superior, shown as {v['rami']} (not named)")
         if v["variation"]:
             lines.append(f"    {FLAG}")
     for side in ("R", "L"):
