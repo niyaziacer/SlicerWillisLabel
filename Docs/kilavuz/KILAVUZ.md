@@ -19,6 +19,16 @@ Açılan pencerede dıştaki `SlicerWillisLabel` klasörünü değil, onun **iç
 
 > Klasörü daha sonra başka bir yere taşırsanız bu yolu da güncellemeniz gerekir. Eski yol listede kalırsa Slicer modülü bulamaz ya da eski kopyayı yükler.
 
+> **GitHub'dan ZIP olarak indirdiyseniz:** GitHub klasörü `SlicerWillisLabel-main` adıyla açar. Bu durumda eklenecek yol `...\SlicerWillisLabel-main\WillisLabel` olur.
+
+> **scipy hatası alırsanız:** Modül numpy ve scipy kütüphanelerini kullanır. Geliştirme yapılan bilgisayarda ikisi de Slicer'da hazır bulunuyordu. Slicer'ın temiz bir kurulumunda scipy'nin hazır gelip gelmediği henüz başka bir bilgisayarda denenmedi. Modül açılırken ya da çalışırken `No module named 'scipy'` gibi bir hata görürseniz **View → Python Console**'a şunu yazıp Enter'a basın:
+>
+> ```
+> slicer.util.pip_install('scipy')
+> ```
+>
+> Kurulum bitince Slicer'ı yeniden başlatın.
+
 Listenin en altında `.../SlicerWillisLabel/WillisLabel` satırı görünmelidir:
 
 ![Modül yolu](01_modul_yolu.png)
