@@ -38,6 +38,16 @@ A multiclass circle-of-Willis segmentation from a [TopCoW](https://topcow24.gran
 
 The TopCoW models are not distributed with this extension. They are published by the TopCoW organisers as Docker images ([Zenodo 15665435](https://zenodo.org/records/15665435)). If you use them, please cite the TopCoW challenge paper ([arXiv:2312.17670](https://arxiv.org/abs/2312.17670)).
 
+## Distal ACA: pericallosal course and median vessels
+
+After labelling, the A2 territory is analysed by **course** and **origin**. The corpus callosum is not visible on TOF, so a *pericallosal course* is approximated as reaching at least 10 mm posterior and 8 mm superior to the AComA.
+
+- The posterior-coursing vessel of each A2 is labelled **A. pericallosa** of that side. The A2 keeps its name up to the genu, and its other (anterior / upward) branches become `A2 R rami` / `A2 L rami`.
+- A further posterior branch that leaves the pericallosal artery after the genu is reported as a possible callosomarginal artery. It is not counted as a separate vessel.
+- A third posterior-coursing vessel is named by its origin: from the AComA → **A. callosa mediana** (TA98 A12.2.07.032); from an A2 → *pericallosal variation branch* of that A2.
+- A single pericallosal artery is reported as a possible azygos or bihemispheric ACA.
+- All variation findings are flagged `VARYASYON – anatomist onayı gerekli` (variation, anatomist review required).
+
 ## Notes and limitations
 
 - **"Not visualised" is not "absent".** Slow-flow or sub-millimetre vessels (often AComA or a hypoplastic PComA) may not appear on TOF. Arteries left without a seed are listed as *not seeded*, not as missing.

@@ -38,7 +38,18 @@ ARTERIES = [
     ("ACA R",   "A. cerebri anterior dextra",                     (0.45, 0.15, 0.60), False),
     ("ACA L",   "A. cerebri anterior sinistra",                   (0.65, 0.45, 0.85), False),
     ("A2 3rd",  "A. cerebri anterior mediana (third A2)",         (0.90, 0.60, 0.20), False),
+    # distal ACA, named by course and origin (see aca.py); not seeded directly
+    ("Pericall R", "A. pericallosa dextra",                        (0.90, 0.72, 0.00), False),
+    ("Pericall L", "A. pericallosa sinistra",                      (1.00, 0.85, 0.35), False),
+    ("A2 R var", "A. cerebri anterior dextra – perikallozal varyasyon dalı (VARYASYON)", (0.95, 0.30, 0.55), False),
+    ("A2 L var", "A. cerebri anterior sinistra – perikallozal varyasyon dalı (VARYASYON)", (1.00, 0.55, 0.70), False),
+    ("CallMed", "A. callosa mediana (VARYASYON)",                  (0.00, 0.75, 0.55), False),
+    ("ACA var", "A. cerebri anterior – perikallozal varyasyon dalı, köken belirsiz (VARYASYON)", (0.85, 0.20, 0.20), False),
 ]
+
+# entries that are derived, never placed as seeds (not listed as "not seeded")
+DERIVED = ("Pericall R", "Pericall L", "A2 R var", "A2 L var", "CallMed", "ACA var")
+NOT_SEEDED = ("PCA R", "PCA L", "ACA R", "ACA L", "A2 3rd") + DERIVED
 
 UNCONNECTED = ("Unconnected", "Not connected to any seed", (0.6, 0.6, 0.6))
 

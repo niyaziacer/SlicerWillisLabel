@@ -150,6 +150,21 @@ Rapor halkanın her parçası için üç durumdan birini yazar:
 
 PComA görüntülenmezse P1/P2 ayrımı yapılamaz ve o taraf tek bir "PCA" segmenti olarak verilir.
 
+### Distal ACA: perikallozal seyir ve orta hat damarları
+
+Etiketlemeden sonra modül A2 bölgesini ayrıca inceler (TopCoW kullanılsın ya da kullanılmasın):
+
+- **Seyir.** Korpus kallozum TOF'ta görünmez. Bu yüzden "perikallozal seyir" yaklaşık olarak ölçülür: damar AComA'nın en az **10 mm arkasına** ve **8 mm üstüne** uzanıyorsa perikallozal seyirli sayılır.
+- **A. pericallosa.** Her A2'nin perikallozal seyirli damarı o tarafın *A. pericallosa*'sıdır. A2, damarın en önde olduğu noktaya (genu) kadar A2 adını korur. A2'nin öne ve yukarı giden öteki dalları "*A2 … rami*" (A2'nin diğer dalları) olarak ayrı ve soluk renkte gösterilir.
+- **Aynı damarın üstteki arka dalı.** Perikallozal damardan genu'dan sonra ayrılan ve onun üstünde arkaya giden dal ayrı bir damar sayılmaz. Raporda "*callosomarginal artery?*" olarak not edilir, etiketi "A2 … rami" olur.
+- **Orta hatta üçüncü perikallozal damar** kökenine göre adlandırılır:
+  - AComA'dan çıkıyorsa → *A. callosa mediana (VARYASYON)*
+  - Bir A2'den, o A2'nin kendi perikallozal arterinden ayrı olarak çıkıyorsa → *A. cerebri anterior dextra/sinistra – perikallozal varyasyon dalı (VARYASYON)*. Ayrılma noktası AComA'ya 3 mm'den yakınsa raporda "AComA kökeni dışlanamaz" yazar.
+- **Tek perikallozal arter** görülürse raporda "*Tek perikallozal arter: azigos ya da bihemisferik ACA olasılığı, kontrol ediniz*" yazar. Karşı tarafın perikallozal arteri yalnızca TOF kesit alanının dışında kalmış ya da görüntülenmemiş de olabilir.
+- Varyasyon bulgularının hepsi raporda **"VARYASYON – anatomist onayı gerekli"** diye işaretlenir. Bu bulgular öneridir; görüntü üzerinde doğrulanmadan yayına girmemelidir.
+
+Not: TopCoW "3rd A2" etiketini yalnızca orta hattaki üçüncü damara verir. Modül bu etiketi olduğu gibi kabul etmez; damarın gerçekte nereden çıktığını yeniden izler. IXI002 olgusunda TopCoW'un "3rd A2" dediği damar A2 R'den çıkıyor ve A2 R'nin perikallozal seyirli başka damarı yok. Bu nedenle damar *A. pericallosa dextra* olarak etiketlendi, raporda da tek perikallozal arter uyarısı çıktı.
+
 ### Atıf
 
 TopCoW modelini kullanırsanız TopCoW yarışma makalesine atıf yapın: Yang K. ve ark., *The TopCoW Challenge – Topology-Aware Circle of Willis Segmentation for CT and MR Angiography*, arXiv:2312.17670. Modeller bu eklentiyle dağıtılmaz; TopCoW düzenleyicilerinin Zenodo kaydından indirilir.

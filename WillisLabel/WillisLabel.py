@@ -13,7 +13,7 @@ from slicer.ScriptedLoadableModule import (
     ScriptedLoadableModuleTest,
 )
 
-from WillisLabelLib import anatomy, core, topcow
+from WillisLabelLib import aca, anatomy, core, topcow
 
 
 #
@@ -104,6 +104,8 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         f.addRow(info)
         self.arteryCombo = qt.QComboBox()
         for abbr, latin, *_ in anatomy.ARTERIES:
+            if abbr in anatomy.DERIVED:
+                continue
             self.arteryCombo.addItem(f"{abbr}  –  {latin}", abbr)
         f.addRow("Artery:", self.arteryCombo)
         row = qt.QHBoxLayout()
@@ -258,6 +260,14 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         ijk_axis = int(np.argmax(s_comp))
         return 2 - ijk_axis
 
+    @staticmethod
+    def _postSupKJI(volumeNode):
+        """Unit vectors (array axes k,j,i in mm) pointing posterior and superior."""
+        m = vtk.vtkMatrix4x4(); volumeNode.GetIJKToRASDirectionMatrix(m)
+        post = np.array([-m.GetElement(1, 2 - a) for a in range(3)])
+        sup = np.array([m.GetElement(2, 2 - a) for a in range(3)])
+        return post, sup
+
     # ------------------------------------------------------------- extraction
     def extractArteries(self, volumeNode, low, high, sigma=0.5, minSize=30.0):
         arr = slicer.util.arrayFromVolume(volumeNode)
@@ -353,6 +363,9 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             lab, fixReport = core.fix_branch_origins(lab, mask, names, anatomy.parents(), spacing,
                                                     si_axis=self._siAxisKJI(volumeNode), other_branches=True)
 
+        post, sup = self._postSupKJI(volumeNode)
+        lab, names, acaLines = aca.classify_distal_aca(lab, names, spacing, post, sup)
+
         seg = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "Labelled arteries")
         seg.SetReferenceImageGeometryParameterFromVolumeNode(volumeNode)
         seg.CreateDefaultDisplayNodes()
@@ -363,6 +376,8 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             values.append((core.UNCONNECTED, anatomy.UNCONNECTED[0]))
         for v, n in values:
             m = (lab == v)
+            if not m.any():
+                continue  # e.g. a TopCoW '3rd A2' that was renamed by the distal ACA analysis
             if n == anatomy.UNCONNECTED[0]:
                 segName, col = anatomy.UNCONNECTED[0], anatomy.UNCONNECTED[2]
             else:
@@ -377,7 +392,7 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         covered = {"P1 R": "PCA R", "P2 R": "PCA R", "P1 L": "PCA L", "P2 L": "PCA L",
                    "A1 R": "ACA R", "A2 R": "ACA R", "A1 L": "ACA L", "A2 L": "ACA L"}
         notPlaced = [a[0] for a in anatomy.ARTERIES if a[0] not in seeds
-                     and a[0] not in ("PCA R", "PCA L", "ACA R", "ACA L", "A2 3rd")
+                     and a[0] not in anatomy.NOT_SEEDED
                      and covered.get(a[0]) not in seeds]
         lines.append("")
         if tcVariants is not None:
@@ -385,6 +400,9 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             for k in ("A1 R", "A1 L", "AComA", "3rd A2", "PComA R", "PComA L", "P1 R", "P1 L"):
                 lines.append(f"  {k}: {tcVariants[k]}")
             lines.extend(tcNotes)
+            lines.append("")
+        if acaLines:
+            lines.extend(acaLines)
             lines.append("")
         if lost:
             lines.append("Seeds outside the mask (ignored): " + ", ".join(sorted(set(lost))))
