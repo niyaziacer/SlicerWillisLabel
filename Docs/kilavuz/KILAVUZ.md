@@ -9,7 +9,15 @@ Slicer sürümü: 3D Slicer 5.12.3.
 
 ## Adım 1 – Modül yolunu ekleyin (yalnızca bir kez)
 
-**Edit → Application Settings → Modules** bölümüne gidin. **Additional module paths** kutusunun sağındaki **»** düğmesine basın, ardından **Add** ile `SlicerWillisLabel\WillisLabel` klasörünü seçin. **OK** deyip Slicer'ı kapatıp yeniden açın.
+**Edit → Application Settings → Modules** bölümüne gidin. **Additional module paths** kutusunun sağındaki **»** düğmesine basın, ardından **Add**'e basın.
+
+Açılan pencerede dıştaki `SlicerWillisLabel` klasörünü değil, onun **içindeki `WillisLabel` klasörünü** seçin. Doğru klasörün içinde `WillisLabel.py` dosyası ve `WillisLabelLib` klasörü bulunur. Örnek:
+
+`C:\Users\LENOVO\Desktop\eda_yilmaz_TOF-flair\SlicerWillisLabel\WillisLabel`
+
+**OK** deyip Slicer'ı kapatıp yeniden açın.
+
+> Klasörü daha sonra başka bir yere taşırsanız bu yolu da güncellemeniz gerekir. Eski yol listede kalırsa Slicer modülü bulamaz ya da eski kopyayı yükler.
 
 Listenin en altında `.../SlicerWillisLabel/WillisLabel` satırı görünmelidir:
 
