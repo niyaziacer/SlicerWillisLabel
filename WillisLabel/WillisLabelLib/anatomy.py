@@ -44,9 +44,17 @@ def segment_name(abbr):
     return f"{a[1]} [{abbr}]" if a else abbr
 
 
-def colour(abbr):
+_FALLBACK = [
+    (0.90, 0.10, 0.10), (0.10, 0.50, 0.90), (0.95, 0.75, 0.10), (0.20, 0.70, 0.30),
+    (0.60, 0.25, 0.75), (0.95, 0.50, 0.10), (0.10, 0.75, 0.75), (0.90, 0.40, 0.70),
+    (0.55, 0.35, 0.15), (0.50, 0.80, 0.10), (0.25, 0.25, 0.70), (0.80, 0.80, 0.80),
+]
+
+
+def colour(abbr, index=0):
+    """Catalogue colour, or a distinct fallback colour for names not in the catalogue."""
     a = BY_ABBR.get(abbr)
-    return a[2] if a else (0.7, 0.7, 0.7)
+    return a[2] if a else _FALLBACK[index % len(_FALLBACK)]
 
 
 def parents():

@@ -329,7 +329,7 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             if n == anatomy.UNCONNECTED[0]:
                 segName, col = anatomy.UNCONNECTED[0], anatomy.UNCONNECTED[2]
             else:
-                segName, col = anatomy.segment_name(n), anatomy.colour(n)
+                segName, col = anatomy.segment_name(n), anatomy.colour(n, v - 1)
             sid = seg.GetSegmentation().AddEmptySegment(n, segName)
             seg.GetSegmentation().GetSegment(sid).SetColor(*col)
             slicer.util.updateSegmentBinaryLabelmapFromArray(m.astype(np.uint8), seg, sid, volumeNode)
