@@ -5,6 +5,7 @@ set(MODULE_PYTHON_SCRIPTS
   WillisLabelLib/__init__.py
   WillisLabelLib/core.py
   WillisLabelLib/anatomy.py
+  WillisLabelLib/topcow.py
   )
 
 set(MODULE_PYTHON_RESOURCES

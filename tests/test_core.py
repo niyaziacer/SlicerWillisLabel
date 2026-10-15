@@ -38,7 +38,7 @@ def test_unconnected_component_gets_own_label():
     truth = truth.copy()
     truth[5:10, 5:10, 5:10] = True  # isolated blob
     lab, names, _ = core.label_from_seeds(truth, {"BA": [(10, 30, 30)]}, (1, 1, 1))
-    assert lab[7, 7, 7] == len(names) + 1
+    assert lab[7, 7, 7] == core.UNCONNECTED
 
 
 def test_snap_to_mask():
@@ -51,3 +51,24 @@ def test_anatomy_catalogue_unique():
     abbrs = [a[0] for a in anatomy.ARTERIES]
     assert len(abbrs) == len(set(abbrs))
     assert {"A1 R", "A1 L", "AComA", "P1 R", "P1 L", "PComA R", "PComA L"} <= set(abbrs)
+
+
+def test_topcow_split_p1_p2():
+    from WillisLabelLib import topcow
+    lab = np.zeros((40, 10, 10), np.uint8)
+    lab[0:5, 5, 5] = 1      # BA
+    lab[5:35, 5, 5] = 2     # R-PCA
+    lab[20, 6:9, 5] = 8     # R-PComA joining PCA at index 20
+    seeds, region, notes = topcow.seeds_from_topcow(lab, (1, 1, 1))
+    assert not notes
+    assert region["P1 R"][10, 5, 5] and region["P2 R"][30, 5, 5]
+    assert not region["P1 R"][30, 5, 5]
+
+
+def test_topcow_no_pcom_no_split():
+    from WillisLabelLib import topcow
+    lab = np.zeros((40, 10, 10), np.uint8)
+    lab[0:5, 5, 5] = 1
+    lab[5:35, 5, 5] = 2
+    seeds, region, notes = topcow.seeds_from_topcow(lab, (1, 1, 1))
+    assert "PCA R" in region and notes

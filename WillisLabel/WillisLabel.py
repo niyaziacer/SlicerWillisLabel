@@ -322,8 +322,8 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         voxmm3 = float(np.prod(spacing))
         lines = ["Artery\tvolume (mm³)"]
         values = [(i + 1, n) for i, n in enumerate(names)]
-        if (lab == len(names) + 1).any():
-            values.append((len(names) + 1, anatomy.UNCONNECTED[0]))
+        if (lab == core.UNCONNECTED).any():
+            values.append((core.UNCONNECTED, anatomy.UNCONNECTED[0]))
         for v, n in values:
             m = (lab == v)
             if n == anatomy.UNCONNECTED[0]:

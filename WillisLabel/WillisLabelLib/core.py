@@ -10,6 +10,7 @@ from scipy import sparse
 from scipy.sparse import csgraph
 
 STRUCT26 = np.ones((3, 3, 3), bool)
+UNCONNECTED = 255
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +144,7 @@ def label_from_seeds(mask, seeds, spacing, graph=None):
 
     seeds: dict {label_name: [ijk, ...]} (already snapped into the mask)
     Returns (labelmap uint8, names list, graph). Voxels not connected to any
-    seed get value len(names)+1 (``unconnected``) if any exist, else 0.
+    seed get the value ``UNCONNECTED`` (255).
     """
     g = graph or VoxelGraph(mask, spacing)
     names = [n for n in seeds if g.nodes(seeds[n])]
@@ -155,7 +156,7 @@ def label_from_seeds(mask, seeds, spacing, graph=None):
     lab = np.zeros(mask.shape, np.uint8)
     vals = (best + 1).astype(np.uint8)
     if unconnected.any():
-        vals[unconnected] = len(names) + 1
+        vals[unconnected] = UNCONNECTED
     lab[tuple(g.coords.T)] = vals
     return lab, names, g
 
@@ -163,7 +164,7 @@ def label_from_seeds(mask, seeds, spacing, graph=None):
 # ---------------------------------------------------------------------------
 # 4. Branch-origin correction ("stub fix")
 # ---------------------------------------------------------------------------
-def fix_branch_origins(lab, mask, names, parents, spacing, margin_mm=0.5, si_axis=2):
+def fix_branch_origins(lab, mask, names, parents, spacing, margin_mm=0.5, si_axis=2, other_branches=False):
     """Give the first millimetres of each branch to the branch, not the parent.
 
     For each parent artery a centreline is traced between its lowest and highest
@@ -204,16 +205,23 @@ def fix_branch_origins(lab, mask, names, parents, spacing, margin_mm=0.5, si_axi
         stub = np.zeros_like(P); stub[cr] = Pc & ~zone
         lc, n = ndi.label(stub, structure=STRUCT26)
         moved = 0
+        other_val = None
         for k, sl in enumerate(ndi.find_objects(lc), start=1):
             sl2 = tuple(slice(max(s.start - 1, 0), s.stop + 1) for s in sl)
             comp = lc[sl2] == k
             ring = ndi.binary_dilation(comp, structure=STRUCT26) & ~comp
             nb = lab[sl2][ring]
-            nb = nb[(nb != 0) & (nb != pv)]
-            if len(nb) == 0:
-                continue
+            nb = nb[(nb != 0) & (nb != pv) & (nb != UNCONNECTED)]
             sub = lab[sl2]
-            sub[comp] = np.bincount(nb).argmax()
+            if len(nb) == 0:
+                if not other_branches:
+                    continue
+                if other_val is None:
+                    names.append(f"{p} rami")
+                    other_val = len(names)
+                sub[comp] = other_val
+            else:
+                sub[comp] = np.bincount(nb).argmax()
             moved += int(comp.sum())
         report[p] = dict(centreline_vox=int(len(path)), radius_mm=round(R, 2), stubs=int(n), moved_vox=moved)
     return lab, report

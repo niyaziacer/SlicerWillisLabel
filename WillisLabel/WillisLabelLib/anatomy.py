@@ -32,6 +32,12 @@ ARTERIES = [
     ("AComA",   "A. communicans anterior",                        (1.00, 0.40, 0.00), False),
     ("A2 R",    "A. cerebri anterior dextra, pars postcommunicalis (A2+)", (0.40, 0.10, 0.50), False),
     ("A2 L",    "A. cerebri anterior sinistra, pars postcommunicalis (A2+)", (0.60, 0.35, 0.75), False),
+    # used when TopCoW labels cannot be split into P1/P2 or A1/A2
+    ("PCA R",   "A. cerebri posterior dextra",                    (0.15, 0.35, 0.70), False),
+    ("PCA L",   "A. cerebri posterior sinistra",                  (0.40, 0.55, 0.90), False),
+    ("ACA R",   "A. cerebri anterior dextra",                     (0.45, 0.15, 0.60), False),
+    ("ACA L",   "A. cerebri anterior sinistra",                   (0.65, 0.45, 0.85), False),
+    ("A2 3rd",  "A. cerebri anterior mediana (third A2)",         (0.90, 0.60, 0.20), False),
 ]
 
 UNCONNECTED = ("Unconnected", "Not connected to any seed", (0.6, 0.6, 0.6))
@@ -39,7 +45,13 @@ UNCONNECTED = ("Unconnected", "Not connected to any seed", (0.6, 0.6, 0.6))
 BY_ABBR = {a[0]: a for a in ARTERIES}
 
 
+RAMI = " rami"
+
+
 def segment_name(abbr):
+    if abbr.endswith(RAMI):
+        base = BY_ABBR.get(abbr[: -len(RAMI)])
+        return f"{base[1]} – rami alii [{abbr}]" if base else abbr
     a = BY_ABBR.get(abbr)
     return f"{a[1]} [{abbr}]" if a else abbr
 
@@ -53,6 +65,10 @@ _FALLBACK = [
 
 def colour(abbr, index=0):
     """Catalogue colour, or a distinct fallback colour for names not in the catalogue."""
+    if abbr.endswith(RAMI):
+        base = BY_ABBR.get(abbr[: -len(RAMI)])
+        if base:  # washed-out version of the parent colour
+            return tuple(0.55 + 0.35 * c for c in base[2])
     a = BY_ABBR.get(abbr)
     return a[2] if a else _FALLBACK[index % len(_FALLBACK)]
 
