@@ -2,6 +2,10 @@
 
 > **Status: work in progress.** Validated on one TOF-MRA case so far; multi-case validation on the public IXI dataset is under way. Not yet submitted to the Slicer Extensions Index.
 
+![Willis Label in 3D Slicer](Screenshots/Screenshot1.png)
+
+*IXI013 (IXI dataset, CC BY-SA 3.0), viewed from below. The arteries were labelled automatically with TopCoW classes as seeds and no manual points. The pale segments are side branches that received no seed (`ICA rami`), including orbital fat attached to the ICA. The orange branch on the left is a known error: the left SCA was absorbed into the BA because it had no seed.*
+
 A 3D Slicer extension that extracts the intracranial arteries from a **TOF-MRA** volume and labels them anatomically:
 
 - vertebral, basilar and internal carotid arteries
@@ -45,7 +49,7 @@ The TopCoW models are not distributed with this extension. They are published by
 - [x] Circle of Willis visualisation summary from TopCoW labels
 - [ ] Variation report per case: circle of Willis completeness, fetal / partial-fetal PCA, A1 hypoplasia or aplasia (left/right ratios), AComA/PComA visualisation, VA dominance, PICA origin
 - [ ] Validation on IXI TOF-MRA cases (CC BY-SA 3.0) and sample data
-- [ ] Screenshot and tutorial
+- [x] Screenshot and Turkish tutorial (`Docs/kilavuz`)
 
 ## Development
 
