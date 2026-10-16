@@ -59,7 +59,22 @@ Panelde dört bölüm vardır: *1. Extract arteries*, *2. Place seeds*, *3. Labe
 
 Willis halkası en iyi alttan (**inferior**) görünür. 3B pencerenin üst şeridindeki **raptiye (📌)** simgesine tıklayın, yön düğmelerinden **I**'yı seçin ve fare tekerleğiyle yakınlaşın. Bu görünümde üst taraf anteriordur ve **ekranın solu hastanın sağıdır**.
 
-## Adım 6 – Tohum noktalarını yerleştirin
+## Adım 6 – Dallara ayırın ve adlandırın (önerilen yol)
+
+Bu yolda modül yalnızca geometriyi yapar; adları anatomist verir. TopCoW ve Docker gerekmez.
+
+1. **2. Branches and names** bölümünde **Split into branches**'e basın. Damar ağacı çatallanma noktalarından kesilir; her dal bir numara ve renk alır ("Branch 37" gibi). Bir olgu birkaç saniye sürer.
+2. **Name** kutusundan adı seçin (listede yoksa yazın), **Name branch**'e basın ve dala tıklayın. Tıklama kipi açık kalır: aynı adı birden çok dala art arda verebilirsiniz. Başka ada geçmek için kutudan yeni adı seçmeniz yeter; durdurmak için Esc ya da sağ tık.
+3. Aynı adı alan dallar tek segmentte birleşir (örneğin MCA'nın gövdesi ve dalları). Yanlış adlandırdıysanız **Undo**, ya da dala "(unnamed)" verin.
+4. Kafatası dışındaki parçalara `ECA R/L`, yağ dokusuna `Non-vascular?` adını verebilirsiniz.
+5. Yalnızca ilgilendiğiniz dalları adlandırın; geri kalanlar numaralı kalır. **Volume table** adlandırılmış damarların ve adsız dalların toplam hacmini verir.
+6. İsteğe bağlı: TopCoW dosyanız varsa (**Load file…** ya da **Run TopCoW…**), **Suggest names from TopCoW** büyük damarlar için soluk renkli öneriler koyar (`MCA R ?` gibi). Öneriyi siz aynı adla adlandırdığınızda kesinleşir; modül sizin verdiğiniz bir adı hiçbir zaman değiştirmez.
+
+Her adlandırma segmentasyonun içinde kayıt olarak saklanır (`WillisLabel.names`).
+
+> Aşağıdaki 7–9. adımlar (tohum, otomatik etiketleme, düzeltme) eski, ileri düzey yoldur; panelde A, B, C bölümleri olarak kapalı durur.
+
+## Adım 7 – Tohum noktalarını yerleştirin (ileri düzey)
 
 1. **Artery** listesinden arteri seçin (örneğin `BA – A. basilaris`). Liste açıkken kısaltmayı yazmak (`ICA R`, `P1 L`…) doğrudan o satıra götürür.
 2. **Place**'e basın ve 3B görünümde (ya da kesitte) o arterin üzerine tıklayın. Nokta, seçili arterin adını otomatik olarak alır.
@@ -72,7 +87,7 @@ Bu örnekte 12 nokta yerleştirildi: BA, ICA R/L, MCA R/L, A1 R, AComA, A2 L, P1
 
 ![Tohum noktaları](05_tohumlar.png)
 
-## Adım 7 – Etiketleyin
+## Adım 8 – Etiketleyin (ileri düzey)
 
 **3. Label arteries** bölümünde **Label arteries**'e basın. Her arter Latince adı ve kendi rengiyle ayrı bir segment olur. Alttaki kutuda her arterin hacmi (mm³) ve tohum konmamış arterlerin listesi yazar.
 
@@ -80,7 +95,7 @@ Bu örnekte 12 nokta yerleştirildi: BA, ICA R/L, MCA R/L, A1 R, AComA, A2 L, P1
 
 ![Etiketli sonuç – dörtlü görünüm](07_etiketli_dortlu.png)
 
-## Adım 8 – Yanlış etiketleri düzeltin (anatomist)
+## Adım 9 – Otomatik etiketleri düzeltin (ileri düzey)
 
 Otomatik etiketler bir öneridir; son kararı anatomist verir.
 
@@ -92,7 +107,7 @@ Otomatik etiketler bir öneridir; son kararı anatomist verir.
 
 Her düzeltme raporun sonuna yazılır ve segmentasyonla birlikte saklanır. Düzeltilmiş olgular ileride yöntemin doğruluğunu ölçmek için kullanılabilir.
 
-## Adım 9 – Dışa aktarın (3B baskı için)
+## Adım 10 – Dışa aktarın (3B baskı için)
 
 **4. Export** bölümünde bir klasör seçin ve **Export each artery as STL**'e basın. Her arter ayrı bir STL dosyası olarak kaydedilir.
 

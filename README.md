@@ -27,6 +27,15 @@ Segment names use Terminologia Anatomica (Latin) with the usual abbreviation, e.
 
 Side branches that received no seed are not merged into their parent trunk. They are collected in a separate, paler segment such as `ICA R rami`.
 
+## Recommended workflow: branches named by the anatomist
+
+1. **Extract arteries** (as above).
+2. **Split into branches**: the artery tree is cut at its bifurcations (voxel coding on the geodesic distance from the inflow vessels, no skeleton library); every branch gets a number and a colour. Loops such as the circle of Willis are handled.
+3. **Name branch**: choose a name and click on a branch. Branches given the same name are merged into one segment. Unnamed branches stay numbered. Every naming is logged on the segmentation node (`WillisLabel.names`).
+4. Optional **Suggest names from TopCoW**: branches lying mostly inside a TopCoW class get that name as a pale suggestion (`MCA R ?`); a name given by the user is never overwritten.
+
+No TopCoW model or Docker is needed for this workflow. The automatic naming described below remains available as an advanced option.
+
 ## Optional: TopCoW labels as automatic seeds
 
 A multiclass circle-of-Willis segmentation from a [TopCoW](https://topcow24.grand-challenge.org/) model can be used instead of, or together with, manual seeds. Press **Load file…** next to *TopCoW labels (optional)* and choose the model output (`.mha` / `.nii.gz`); it is loaded as a label map and selected. Then:

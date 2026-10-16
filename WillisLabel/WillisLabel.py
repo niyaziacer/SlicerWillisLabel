@@ -13,7 +13,7 @@ from slicer.ScriptedLoadableModule import (
     ScriptedLoadableModuleTest,
 )
 
-from WillisLabelLib import aca, anatomy, core, sca, topcow
+from WillisLabelLib import aca, anatomy, branches, core, sca, topcow
 
 
 #
@@ -93,8 +93,59 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.maskSelector.setToolTip("All visible segments of this segmentation are used as the artery mask")
         f.addRow("Artery mask:", self.maskSelector)
 
+        # ---- 2. Branches and names (default workflow: the anatomist names the branches)
+        box = ctk.ctkCollapsibleButton(); box.text = "2. Branches and names"
+        self.layout.addWidget(box); f = qt.QFormLayout(box)
+        info = qt.QLabel(
+            "'Split into branches' cuts the artery tree at its bifurcations; every branch gets a number and "
+            "a colour. Name a branch: choose a name, press 'Name branch' and click on the branch. "
+            "Branches given the same name are merged. Unnamed branches stay numbered.")
+        info.wordWrap = True
+        f.addRow(info)
+        self.splitButton = qt.QPushButton("Split into branches")
+        f.addRow(self.splitButton)
+        self.nameCombo = qt.QComboBox(); self.nameCombo.editable = True
+        for abbr, latin, *_ in anatomy.ARTERIES:
+            self.nameCombo.addItem(f"{abbr}  –  {latin}", abbr)
+        for abbr in ("ECA R", "ECA L", anatomy.NON_VASCULAR[0], branches.UNNAMED):
+            self.nameCombo.addItem(abbr, abbr)
+        f.addRow("Name:", self.nameCombo)
+        row = qt.QHBoxLayout()
+        self.nameButton = qt.QPushButton("Name branch")
+        self.nameUndoButton = qt.QPushButton("Undo")
+        self.volButton = qt.QPushButton("Volume table")
+        row.addWidget(self.nameButton); row.addWidget(self.nameUndoButton); row.addWidget(self.volButton)
+        f.addRow(row)
+        self.topcowSelector = slicer.qMRMLNodeComboBox()
+        self.topcowSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode"]
+        self.topcowSelector.addEnabled = False; self.topcowSelector.noneEnabled = True
+        self.topcowSelector.setMRMLScene(slicer.mrmlScene)
+        self.topcowSelector.setToolTip(
+            "Optional: a TopCoW multiclass circle-of-Willis segmentation (load the output .mha/.nii.gz "
+            "as a label map). Its classes are used as automatic seeds; P1/P2 and A1/A2 are split at the "
+            "PComA/AComA junctions. Add manual seeds only for vessels TopCoW does not label (VA, SCA, AICA, PICA).")
+        tcRow = qt.QHBoxLayout()
+        tcRow.addWidget(self.topcowSelector, 1)
+        self.topcowLoadButton = qt.QPushButton("Load file…")
+        self.topcowLoadButton.toolTip = ("Load a TopCoW output (.mha / .nii.gz) as a label map and select it here")
+        tcRow.addWidget(self.topcowLoadButton)
+        self.topcowRunButton = qt.QPushButton("Run TopCoW…")
+        self.topcowRunButton.toolTip = ("Run the TopCoW model (Docker image topcow24_ct:latest) on the selected TOF. "
+                                        "The result is saved next to the TOF as <name>_TopCoW.mha and selected here. "
+                                        "Takes about 2 minutes with an NVIDIA GPU.")
+        tcRow.addWidget(self.topcowRunButton)
+        f.addRow("TopCoW (optional):", tcRow)
+        self.suggestNamesButton = qt.QPushButton("Suggest names from TopCoW (optional)")
+        self.suggestNamesButton.toolTip = ("Branches lying mostly inside a TopCoW class get that name as a suggestion "
+                                           "(shown as '<name> ?'). Confirm by naming the branch yourself.")
+        f.addRow(self.suggestNamesButton)
+        self.branchText = qt.QPlainTextEdit(); self.branchText.readOnly = True
+        self.branchText.setMinimumHeight(120)
+        f.addRow(self.branchText)
+        self._nameNode = None
+
         # ---- 2. Seeds
-        box = ctk.ctkCollapsibleButton(); box.text = "2. Place seeds"
+        box = ctk.ctkCollapsibleButton(); box.text = "A. Automatic naming – seeds (advanced)"; box.collapsed = True
         self.layout.addWidget(box); f = qt.QFormLayout(box)
         info = qt.QLabel(
             "Choose an artery, press 'Place', then click on that artery in the 3D view or a slice. "
@@ -119,28 +170,9 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.seedsWidget.markupsSelectorComboBox().nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
         f.addRow(self.seedsWidget)
 
-        self.topcowSelector = slicer.qMRMLNodeComboBox()
-        self.topcowSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode"]
-        self.topcowSelector.addEnabled = False; self.topcowSelector.noneEnabled = True
-        self.topcowSelector.setMRMLScene(slicer.mrmlScene)
-        self.topcowSelector.setToolTip(
-            "Optional: a TopCoW multiclass circle-of-Willis segmentation (load the output .mha/.nii.gz "
-            "as a label map). Its classes are used as automatic seeds; P1/P2 and A1/A2 are split at the "
-            "PComA/AComA junctions. Add manual seeds only for vessels TopCoW does not label (VA, SCA, AICA, PICA).")
-        tcRow = qt.QHBoxLayout()
-        tcRow.addWidget(self.topcowSelector, 1)
-        self.topcowLoadButton = qt.QPushButton("Load file…")
-        self.topcowLoadButton.toolTip = ("Load a TopCoW output (.mha / .nii.gz) as a label map and select it here")
-        tcRow.addWidget(self.topcowLoadButton)
-        self.topcowRunButton = qt.QPushButton("Run TopCoW…")
-        self.topcowRunButton.toolTip = ("Run the TopCoW model (Docker image topcow24_ct:latest) on the selected TOF. "
-                                        "The result is saved next to the TOF as <name>_TopCoW.mha and selected here. "
-                                        "Takes about 2 minutes with an NVIDIA GPU.")
-        tcRow.addWidget(self.topcowRunButton)
-        f.addRow("TopCoW labels (optional):", tcRow)
 
         # ---- 3. Label
-        box = ctk.ctkCollapsibleButton(); box.text = "3. Label arteries"
+        box = ctk.ctkCollapsibleButton(); box.text = "B. Automatic naming – label arteries (advanced)"; box.collapsed = True
         self.layout.addWidget(box); f = qt.QFormLayout(box)
         self.fixOriginsCheck = qt.QCheckBox("Colour branches from their origin (centreline correction)")
         self.fixOriginsCheck.checked = True
@@ -163,7 +195,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         f.addRow(self.resultText)
 
         # ---- 4. Corrections by the anatomist
-        box = ctk.ctkCollapsibleButton(); box.text = "4. Correct labels (anatomist)"
+        box = ctk.ctkCollapsibleButton(); box.text = "C. Correct automatic labels (advanced)"; box.collapsed = True
         self.layout.addWidget(box); f = qt.QFormLayout(box)
         info = qt.QLabel(
             "Wrong name? Choose the correct artery and press 'Pick branch'. "
@@ -192,7 +224,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self._fixFirst = None
 
         # ---- 5. Export
-        box = ctk.ctkCollapsibleButton(); box.text = "5. Export"; box.collapsed = True
+        box = ctk.ctkCollapsibleButton(); box.text = "3. Export"; box.collapsed = True
         self.layout.addWidget(box); f = qt.QFormLayout(box)
         self.exportDir = ctk.ctkDirectoryButton()
         self.exportDir.directory = os.path.expanduser("~")
@@ -211,6 +243,11 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.exportButton.connect("clicked()", self.onExport)
         self.pickButton.connect("clicked()", self.onPickBranch)
         self.topcowLoadButton.connect("clicked()", self.onLoadTopCoW)
+        self.splitButton.connect("clicked()", self.onSplit)
+        self.nameButton.connect("clicked()", self.onNameBranch)
+        self.nameUndoButton.connect("clicked()", self.onNameUndo)
+        self.volButton.connect("clicked()", self.onVolumeTable)
+        self.suggestNamesButton.connect("clicked()", self.onSuggestNames)
         self.topcowRunButton.connect("clicked()", self.onRunTopCoW)
         self.undoButton.connect("clicked()", self.onUndoCorrection)
         self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputChanged)
@@ -311,6 +348,67 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             if vol is not None and vol.GetName().split("_")[0][:6] not in base:
                 slicer.util.warningDisplay(
                     f"Check that the TopCoW file belongs to this image:\nTOF: {vol.GetName()}\nTopCoW: {base}")
+
+    # ---- branches workflow
+    def onSplit(self):
+        vol = self.inputSelector.currentNode(); mask = self.maskSelector.currentNode()
+        if vol is None or mask is None:
+            slicer.util.errorDisplay("Select the TOF volume and extract the arteries first.")
+            return
+        with slicer.util.tryWithErrorDisplay("Splitting failed.", waitCursor=True):
+            seg, n, secs = self.logic.splitBranches(vol, mask)
+            self.labelSegNode = seg
+            self.branchText.setPlainText(f"{n} branches in {secs:.0f} s. Name the ones you need; the rest stay numbered.")
+
+    def _nameAbbr(self):
+        i = self.nameCombo.currentIndex; txt = self.nameCombo.currentText
+        if i >= 0 and self.nameCombo.itemText(i) == txt:
+            return self.nameCombo.itemData(i)
+        return txt.split("  –  ")[0].strip()
+
+    def onNameBranch(self):
+        if not getattr(self.logic, "bstate", None):
+            slicer.util.errorDisplay("Press 'Split into branches' first.")
+            return
+        if self._nameNode is None or slicer.mrmlScene.GetNodeByID(self._nameNode.GetID()) is None:
+            self._nameNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "WillisLabel names")
+            self._nameNode.CreateDefaultDisplayNodes()
+            self._nameNode.GetDisplayNode().SetSelectedColor(1.0, 1.0, 0.0)
+            self._nameNode.GetDisplayNode().SetPointLabelsVisibility(False)
+            self._nameNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self._onNamePoint)
+        self._nameNode.SetControlPointLabelFormat(self._nameAbbr())
+        selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+        selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+        selectionNode.SetActivePlaceNodeID(self._nameNode.GetID())
+        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+        interactionNode.SetPlaceModePersistence(1)   # keep clicking branches; Esc / right-click to stop
+        interactionNode.SetCurrentInteractionMode(interactionNode.Place)
+
+    def _onNamePoint(self, caller, event):
+        n = caller.GetNumberOfControlPoints()
+        if n == 0:
+            return
+        ras = [0.0, 0.0, 0.0]
+        caller.GetNthControlPointPositionWorld(n - 1, ras)
+        caller.RemoveNthControlPoint(n - 1)   # the click is only a pointer
+        with slicer.util.tryWithErrorDisplay("Naming failed.", waitCursor=True):
+            self.branchText.appendPlainText(self.logic.nameBranchAt(ras, self._nameAbbr()))
+
+    def onNameUndo(self):
+        with slicer.util.tryWithErrorDisplay("Undo failed.", waitCursor=True):
+            self.branchText.appendPlainText(self.logic.undoName())
+
+    def onVolumeTable(self):
+        with slicer.util.tryWithErrorDisplay("Could not compute volumes.", waitCursor=True):
+            self.branchText.appendPlainText(self.logic.volumeTable())
+
+    def onSuggestNames(self):
+        tc = self.topcowSelector.currentNode()
+        if tc is None:
+            slicer.util.errorDisplay("Load a TopCoW file (Load file…) or run TopCoW first.")
+            return
+        with slicer.util.tryWithErrorDisplay("Suggestion failed.", waitCursor=True):
+            self.branchText.appendPlainText(self.logic.suggestNames(tc))
 
     def onRunTopCoW(self):
         vol = self.inputSelector.currentNode()
@@ -463,6 +561,152 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             return slicer.util.arrayFromVolume(lab) > 0
         finally:
             slicer.mrmlScene.RemoveNode(lab)
+
+    # ------------------------------------------------------- branches workflow
+    def splitBranches(self, volumeNode, maskSegNode):
+        t0 = time.time()
+        mask = self.maskArray(maskSegNode, volumeNode)
+        spacing = self._spacingKJI(volumeNode)
+        lab, n = branches.split_branches(mask, spacing, si_axis=self._siAxisKJI(volumeNode))
+        seg = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "Artery branches")
+        seg.SetReferenceImageGeometryParameterFromVolumeNode(volumeNode)
+        seg.CreateDefaultDisplayNodes()
+        self.bstate = dict(seg=seg, vol=volumeNode, lab=lab, spacing=spacing, n=n,
+                           name={}, undo=[], log=[])
+        # import all branches at once through a labelmap + colour table (fast, names and colours set)
+        ct = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLColorTableNode", "WillisLabel branch colours")
+        ct.SetTypeToUser(); ct.SetNumberOfColors(n + 1)
+        ct.SetColor(0, "background", 0, 0, 0, 0)
+        for b in range(1, n + 1):
+            ct.SetColor(b, branches.branch_id(b), *branches.colour(b), 1.0)
+        lm = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode", "WillisLabel branches tmp")
+        m = vtk.vtkMatrix4x4(); volumeNode.GetIJKToRASMatrix(m); lm.SetIJKToRASMatrix(m)
+        slicer.util.updateVolumeFromArray(lm, lab.astype(np.int32))
+        lm.CreateDefaultDisplayNodes(); lm.GetDisplayNode().SetAndObserveColorNodeID(ct.GetID())
+        try:
+            slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(lm, seg)
+        finally:
+            slicer.mrmlScene.RemoveNode(lm); slicer.mrmlScene.RemoveNode(ct)
+        seg.CreateClosedSurfaceRepresentation()
+        maskSegNode.GetDisplayNode().SetVisibility(False)
+        return seg, n, time.time() - t0
+
+    def _writeBranchSegment(self, sid, mask, abbr, b=None):
+        st = self.bstate
+        segmentation = st["seg"].GetSegmentation()
+        if abbr is None:   # branch segments were imported: their ID is found through their name
+            found = segmentation.GetSegmentIdBySegmentName(sid)
+            if found:
+                sid = found
+        if not mask.any():
+            if segmentation.GetSegment(sid) is not None:
+                segmentation.RemoveSegment(sid)
+            return
+        if segmentation.GetSegment(sid) is None:
+            if abbr is None:
+                name, col = sid, branches.colour(b)
+            elif abbr == anatomy.NON_VASCULAR[0]:
+                name, col = anatomy.segment_name(abbr), anatomy.NON_VASCULAR[2]
+            elif abbr.endswith(" ?"):
+                base = abbr[:-2]
+                name = anatomy.segment_name(base) + " – suggestion"
+                col = tuple(0.55 + 0.45 * c for c in anatomy.colour(base, 0))
+            else:
+                name, col = anatomy.segment_name(abbr), anatomy.colour(abbr, b or 0)
+            segmentation.AddEmptySegment(sid, name)
+            segmentation.GetSegment(sid).SetColor(*col)
+        slicer.util.updateSegmentBinaryLabelmapFromArray(mask.astype(np.uint8), st["seg"], sid, st["vol"])
+
+    def _segmentOf(self, b):
+        abbr = self.bstate["name"].get(b)
+        return (branches.branch_id(b), None) if abbr is None else (abbr, abbr)
+
+    def _refresh(self, sids):
+        st = self.bstate
+        for sid, abbr in sids:
+            if abbr is None:
+                b = int(sid.split()[-1])
+                self._writeBranchSegment(sid, (st["lab"] == b) if b not in st["name"] else np.zeros(1, bool), None, b)
+            else:
+                bs = [b for b, a in st["name"].items() if a == abbr]
+                self._writeBranchSegment(sid, np.isin(st["lab"], bs) if bs else np.zeros(1, bool), abbr)
+        st["seg"].CreateClosedSurfaceRepresentation()
+
+    def _setName(self, b, abbr):
+        st = self.bstate
+        old = self._segmentOf(b)
+        if abbr in (None, branches.UNNAMED):
+            st["name"].pop(b, None)
+        else:
+            st["name"][b] = abbr
+        self._refresh([old, self._segmentOf(b)])
+
+    def nameBranchAt(self, ras, abbr):
+        st = getattr(self, "bstate", None)
+        if not st:
+            raise ValueError("Press 'Split into branches' first.")
+        m = vtk.vtkMatrix4x4(); st["vol"].GetRASToIJKMatrix(m)
+        ijk = m.MultiplyPoint(list(ras) + [1.0])[:3]
+        kji = tuple(min(max(int(round(c)), 0), n - 1) for c, n in zip(ijk[::-1], st["lab"].shape))
+        b = branches.branch_at(st["lab"], kji, st["spacing"])
+        if b is None:
+            return "No branch within 3 mm of the click."
+        before = st["name"].get(b)
+        st["undo"].append((b, before))
+        self._setName(b, abbr)
+        mm3 = float((st["lab"] == b).sum() * np.prod(st["spacing"]))
+        line = f"Branch {b} ({mm3:.0f} mm³): {before or 'unnamed'} -> {abbr}"
+        st["log"].append(line)
+        st["seg"].SetAttribute("WillisLabel.names", "\n".join(st["log"]))
+        return line
+
+    def undoName(self):
+        st = getattr(self, "bstate", None)
+        if not st or not st["undo"]:
+            return "Nothing to undo."
+        b, before = st["undo"].pop()
+        self._setName(b, before)
+        return f"Undo: branch {b} -> {before or 'unnamed'}"
+
+    def volumeTable(self):
+        st = self.bstate
+        vox = float(np.prod(st["spacing"]))
+        vols = np.bincount(st["lab"].ravel(), minlength=st["n"] + 1) * vox
+        named = {}
+        for b, a in st["name"].items():
+            named[a] = named.get(a, 0.0) + vols[b]
+        lines = ["Name\tvolume (mm³)\tbranches"]
+        for a in sorted(named):
+            nb = sum(1 for x in st["name"].values() if x == a)
+            lines.append(f"{a}\t{named[a]:.0f}\t{nb}")
+        un = [b for b in range(1, st["n"] + 1) if b not in st["name"]]
+        lines.append(f"(unnamed)\t{sum(vols[b] for b in un):.0f}\t{len(un)}")
+        return "\n".join(lines)
+
+    def suggestNames(self, topcowNode):
+        st = self.bstate
+        tc = self.labelmapOnGrid(topcowNode, st["vol"])
+        _, region, _ = topcow.seeds_from_topcow(tc, st["spacing"])
+        cnt = 0
+        for b in range(1, st["n"] + 1):
+            if b in st["name"] and not st["name"][b].endswith(" ?"):
+                continue   # never overwrite the anatomist's name
+            m = st["lab"] == b
+            best, frac = None, 0.0
+            for name, r in region.items():
+                f = float((m & r).sum()) / float(m.sum())
+                if f > frac:
+                    best, frac = name, f
+            if best is not None and frac >= 0.5:
+                st["name"][b] = best + " ?"
+                cnt += 1
+        sids = set()
+        for b in range(1, st["n"] + 1):
+            sids.add((branches.branch_id(b), None))
+        for a in set(st["name"].values()):
+            sids.add((a, a))
+        self._refresh(sorted(sids, key=lambda x: (x[1] is None, x[0])))
+        return f"{cnt} branches got a suggested name ('<name> ?'). Confirm or correct them with 'Name branch'."
 
     def runTopCoW(self, volumeNode, image="topcow24_ct:latest", useGpu=True):
         """Run the TopCoW Docker model on a TOF volume. Returns (labelmap node, saved path, seconds)."""
