@@ -145,6 +145,12 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.bridgeCheck.setToolTip("On TOF distal branches fade and break into pieces. Thin pieces are joined to "
                                     "the tree along their brightest route (max 25 mm). The report lists how many.")
         f.addRow(self.bridgeCheck)
+        self.acaCheck = qt.QCheckBox("Also name distal ACA branches (pericallosal course, variations)")
+        self.acaCheck.checked = False
+        self.acaCheck.setToolTip("Off: only the major arteries (TopCoW classes, BA/ICA/VA) and the SCAs are named; "
+                                 "other branches stay as unnamed branches of their parent. On: the A2 territory is "
+                                 "also analysed (A. pericallosa, median callosal artery, variation branches).")
+        f.addRow(self.acaCheck)
         self.labelButton = qt.QPushButton("Label arteries")
         f.addRow(self.labelButton)
         self.resultText = qt.QPlainTextEdit(); self.resultText.readOnly = True
@@ -269,7 +275,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             slicer.util.errorDisplay("Select the TOF volume, the artery mask and a seed list and/or TopCoW labels.")
             return
         with slicer.util.tryWithErrorDisplay("Labelling failed.", waitCursor=True):
-            seg, report = self.logic.labelArteries(vol, mask, seeds, fixOrigins=self.fixOriginsCheck.checked, bridge=self.bridgeCheck.checked,
+            seg, report = self.logic.labelArteries(vol, mask, seeds, fixOrigins=self.fixOriginsCheck.checked, bridge=self.bridgeCheck.checked, distalAca=self.acaCheck.checked,
                                                    topcowNode=tc)
             self.labelSegNode = seg
             self.resultText.setPlainText(report)
@@ -442,7 +448,8 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         out = sitk.Resample(lab, ref, sitk.Transform(), sitk.sitkNearestNeighbor, 0, sitk.sitkUInt8)
         return sitk.GetArrayFromImage(out).astype(np.uint8)
 
-    def labelArteries(self, volumeNode, maskSegNode, seedNode, fixOrigins=True, topcowNode=None, bridge=True):
+    def labelArteries(self, volumeNode, maskSegNode, seedNode, fixOrigins=True, topcowNode=None, bridge=True,
+                      distalAca=False):
         t0 = time.time()
         img = slicer.util.arrayFromVolume(volumeNode)
         mask = self.maskArray(maskSegNode, volumeNode)
@@ -482,7 +489,9 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             lab, names, fatMm3 = core.flag_thick_rami(lab, names, mask, spacing)
 
         post, sup, left = self._postSupKJI(volumeNode)
-        lab, names, acaLines = aca.classify_distal_aca(lab, names, spacing, post, sup)
+        acaLines = []
+        if distalAca:
+            lab, names, acaLines = aca.classify_distal_aca(lab, names, spacing, post, sup)
         lab, names, scaLines = sca.name_sca(lab, names, spacing, post, sup, left)
 
         seg = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "Labelled arteries")

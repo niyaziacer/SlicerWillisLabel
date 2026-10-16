@@ -168,7 +168,7 @@ TopCoW'da SCA sınıfı yoktur. Modül, baziller arterden P1 ayrımının en faz
 
 ### Distal ACA: perikallozal seyir ve orta hat damarları
 
-Etiketlemeden sonra modül A2 bölgesini ayrıca inceler (TopCoW kullanılsın ya da kullanılmasın):
+Varsayılan olarak yalnız ana arterler (TopCoW sınıfları, BA/ICA/VA) ve SCA'lar adlandırılır; öteki dallar bağlı oldukları arterin adsız dalları olarak kalır. **"Also name distal ACA branches"** kutusu işaretlenirse modül A2 bölgesini ayrıca inceler:
 
 - **Seyir.** Korpus kallozum TOF'ta görünmez. Bu yüzden "perikallozal seyir" yaklaşık olarak ölçülür: damar AComA'nın en az **10 mm arkasına** ve **8 mm üstüne** uzanıyorsa perikallozal seyirli sayılır.
 - **A. pericallosa.** Her A2'nin perikallozal seyirli damarı o tarafın *A. pericallosa*'sıdır. A2, damarın en önde olduğu noktaya (genu) kadar A2 adını korur. A2'nin öne ve yukarı giden öteki dalları "*A2 … rami*" (A2'nin diğer dalları) olarak ayrı ve soluk renkte gösterilir.
