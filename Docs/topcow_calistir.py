@@ -56,6 +56,16 @@ if not os.path.exists(result):
     print(r.stderr[-2000:])
     raise RuntimeError("TopCoW çıktı üretmedi; yukarıdaki hata mesajına bakın.")
 
+# Sonucu TOF dosyasının yanına "<ad>_TopCoW.mha" olarak da kopyala (sonra kolayca bulunsun)
+sn = vol.GetStorageNode()
+tof_dir = os.path.dirname(sn.GetFileName()) if sn and sn.GetFileName() else os.path.join(os.path.expanduser("~"), "Desktop")
+kopya = os.path.join(tof_dir, vol.GetName() + "_TopCoW.mha")
+try:
+    shutil.copyfile(result, kopya)
+    print("TopCoW sonucu kaydedildi:", kopya)
+except OSError as e:
+    print("TopCoW sonucu TOF klasörüne kopyalanamadı:", e)
+
 lab = slicer.util.loadLabelVolume(result)
 lab.SetName(vol.GetName() + "_TopCoW")
 w.topcowSelector.setCurrentNode(lab)

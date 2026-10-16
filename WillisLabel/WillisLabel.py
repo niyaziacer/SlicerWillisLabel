@@ -269,8 +269,13 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             self.resultText.setPlainText(report)
 
     def onLoadTopCoW(self):
+        start = os.path.expanduser("~")
+        vol = self.inputSelector.currentNode()
+        sn = vol.GetStorageNode() if vol else None
+        if sn and sn.GetFileName():
+            start = os.path.dirname(sn.GetFileName())   # TopCoW files are kept next to the TOF
         path = qt.QFileDialog.getOpenFileName(
-            slicer.util.mainWindow(), "TopCoW label map", os.path.expanduser("~"),
+            slicer.util.mainWindow(), "TopCoW label map", start,
             "Label maps (*.mha *.nii.gz *.nii *.nrrd);;All files (*)")
         if not path:
             return
@@ -405,21 +410,17 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             slicer.mrmlScene.RemoveNode(lab)
 
     def labelmapOnGrid(self, labelNode, volumeNode):
-        """Label map values resampled (nearest neighbour) onto the volume's voxel grid."""
-        a = vtk.vtkMatrix4x4(); b = vtk.vtkMatrix4x4()
-        labelNode.GetIJKToRASMatrix(a); volumeNode.GetIJKToRASMatrix(b)
-        same = labelNode.GetImageData().GetDimensions() == volumeNode.GetImageData().GetDimensions() and all(
-            abs(a.GetElement(r, c) - b.GetElement(r, c)) < 1e-4 for r in range(4) for c in range(4))
-        if same and labelNode.GetParentTransformNode() is None:
-            return slicer.util.arrayFromVolume(labelNode).astype(np.uint8)
-        out = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
-        try:
-            params = {"inputVolume": labelNode.GetID(), "referenceVolume": volumeNode.GetID(),
-                      "outputVolume": out.GetID(), "pixelType": "uchar", "interpolationMode": "NearestNeighbor"}
-            slicer.cli.runSync(slicer.modules.brainsresample, None, params)
-            return slicer.util.arrayFromVolume(out).astype(np.uint8).copy()
-        finally:
-            slicer.mrmlScene.RemoveNode(out)
+        """Label map values resampled (nearest neighbour, in physical space) onto the volume's grid.
+
+        SimpleITK is used so that differently oriented grids (e.g. a TopCoW output written in LPS
+        for a volume stored in another orientation) are matched by their physical coordinates.
+        """
+        import SimpleITK as sitk
+        import sitkUtils
+        lab = sitkUtils.PullVolumeFromSlicer(labelNode)
+        ref = sitkUtils.PullVolumeFromSlicer(volumeNode)
+        out = sitk.Resample(lab, ref, sitk.Transform(), sitk.sitkNearestNeighbor, 0, sitk.sitkUInt8)
+        return sitk.GetArrayFromImage(out).astype(np.uint8)
 
     def labelArteries(self, volumeNode, maskSegNode, seedNode, fixOrigins=True, topcowNode=None, bridge=True):
         t0 = time.time()
@@ -433,6 +434,8 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             mask = mask | (tc > 0)
             tcSeeds, _, tcNotes = topcow.seeds_from_topcow(tc, spacing)
             tcVariants = topcow.variant_summary(tc)
+            tcVol = {topcow.TOPCOW[v]: float((tc == v).sum() * np.prod(spacing)) for v in topcow.TOPCOW if (tc == v).any()}
+            tcNotes.insert(0, "TopCoW classes on this grid (mm³): " + ", ".join(f"{k} {v:.0f}" for k, v in tcVol.items()))
         if not raw and not tcSeeds:
             raise ValueError("No seed points have been placed and no TopCoW labels were given.")
         rad = tuple(max(1, int(round(2.0 / s))) for s in spacing)  # search 2 mm around each seed

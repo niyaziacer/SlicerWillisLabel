@@ -150,7 +150,7 @@ Ekran kartınızı görmek için: **Görev Yöneticisi → Performans → GPU**.
 3. Slicer 2–3 dakika donmuş görünebilir; bu normaldir. Sonunda konsolda `TopCoW tamamlandı` yazar ve sonuç *TopCoW labels (optional)* kutusuna kendiliğinden seçilir.
 4. **Extract arteries** ve **Label arteries**'e basın. İsterseniz önce VA, SCA, AICA, PICA için elle nokta ekleyin.
 
-Ara dosyalar `C:\Users\<kullanıcı>\WillisLabel_TopCoW\` klasöründe tutulur.
+Ara dosyalar `C:\Users\<kullanıcı>\WillisLabel_TopCoW\` klasöründe tutulur. Sonuç ayrıca TOF dosyasının yanına `<TOF adı>_TopCoW.mha` olarak kopyalanır; **Load file…** penceresi de TOF'un klasöründe açılır, böylece bir sonraki sefer dosyayı hemen bulursunuz.
 
 ### Raporda Willis halkası
 
