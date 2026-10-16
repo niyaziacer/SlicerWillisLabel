@@ -127,7 +127,12 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             "Optional: a TopCoW multiclass circle-of-Willis segmentation (load the output .mha/.nii.gz "
             "as a label map). Its classes are used as automatic seeds; P1/P2 and A1/A2 are split at the "
             "PComA/AComA junctions. Add manual seeds only for vessels TopCoW does not label (VA, SCA, AICA, PICA).")
-        f.addRow("TopCoW labels (optional):", self.topcowSelector)
+        tcRow = qt.QHBoxLayout()
+        tcRow.addWidget(self.topcowSelector, 1)
+        self.topcowLoadButton = qt.QPushButton("Load file…")
+        self.topcowLoadButton.toolTip = ("Load a TopCoW output (.mha / .nii.gz) as a label map and select it here")
+        tcRow.addWidget(self.topcowLoadButton)
+        f.addRow("TopCoW labels (optional):", tcRow)
 
         # ---- 3. Label
         box = ctk.ctkCollapsibleButton(); box.text = "3. Label arteries"
@@ -188,6 +193,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.labelButton.connect("clicked()", self.onLabel)
         self.exportButton.connect("clicked()", self.onExport)
         self.pickButton.connect("clicked()", self.onPickBranch)
+        self.topcowLoadButton.connect("clicked()", self.onLoadTopCoW)
         self.undoButton.connect("clicked()", self.onUndoCorrection)
         self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputChanged)
         self.onInputChanged(self.inputSelector.currentNode())
@@ -261,6 +267,18 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
                                                    topcowNode=tc)
             self.labelSegNode = seg
             self.resultText.setPlainText(report)
+
+    def onLoadTopCoW(self):
+        path = qt.QFileDialog.getOpenFileName(
+            slicer.util.mainWindow(), "TopCoW label map", os.path.expanduser("~"),
+            "Label maps (*.mha *.nii.gz *.nii *.nrrd);;All files (*)")
+        if not path:
+            return
+        with slicer.util.tryWithErrorDisplay("Could not load the TopCoW file.", waitCursor=True):
+            node = slicer.util.loadLabelVolume(path)
+            vol = self.inputSelector.currentNode()
+            node.SetName((vol.GetName() if vol else os.path.basename(path).split(".")[0]) + "_TopCoW")
+            self.topcowSelector.setCurrentNode(node)
 
     def _fixAbbr(self):
         i = self.fixCombo.currentIndex

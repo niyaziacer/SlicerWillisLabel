@@ -29,7 +29,7 @@ Side branches that received no seed are not merged into their parent trunk. They
 
 ## Optional: TopCoW labels as automatic seeds
 
-A multiclass circle-of-Willis segmentation from a [TopCoW](https://topcow24.grand-challenge.org/) model can be used instead of, or together with, manual seeds. Load the model output (`.mha` / `.nii.gz`) as a **label map** and select it in *TopCoW labels (optional)*. Then:
+A multiclass circle-of-Willis segmentation from a [TopCoW](https://topcow24.grand-challenge.org/) model can be used instead of, or together with, manual seeds. Press **Load file…** next to *TopCoW labels (optional)* and choose the model output (`.mha` / `.nii.gz`); it is loaded as a label map and selected. Then:
 
 - Each TopCoW class seeds the corresponding artery. TopCoW's PCA is split into **P1/P2** at the PComA junction, and its ACA into **A1/A2** at the AComA junction.
 - The labels are propagated along the vessels to the distal branches.

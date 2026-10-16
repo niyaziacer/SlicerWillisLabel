@@ -102,7 +102,7 @@ Her düzeltme raporun sonuna yazılır ve segmentasyonla birlikte saklanır. Dü
 
 [TopCoW](https://topcow24.grand-challenge.org/) yarışmasının modelleri Willis halkasını (ICA, MCA, A1/ACA, AComA, PComA, P1/PCA, BA, 3. A2) otomatik olarak etiketler. Willis Label bu etiketleri **otomatik tohum** olarak kullanabilir. Bu durumda Willis halkası için elle nokta koymak gerekmez; yalnızca TopCoW'un tanımadığı damarlara (VA, SCA, AICA, PICA) nokta koyulur. Rapor ayrıca halkanın her parçasının görüntülenip görüntülenmediğini yazar.
 
-> **Kurslar için öneri:** Bu bölüm Docker kurulumu gerektirir. Kurulum yarım saati bulabilir ve çoğu kursiyerin bilgisayarında Docker yoktur. Kursta en pratik yol, eğitmenin TopCoW çıktısını (`..._TopCoW` etiket haritası) önceden hazırlayıp TOF görüntüsüyle birlikte dağıtmasıdır. Kursiyer yalnızca bu dosyayı **etiket haritası** (label map) olarak yükleyip *TopCoW labels (optional)* kutusunda seçer.
+> **Kurslar için öneri:** Bu bölüm Docker kurulumu gerektirir. Kurulum yarım saati bulabilir ve çoğu kursiyerin bilgisayarında Docker yoktur. Kursta en pratik yol, eğitmenin TopCoW çıktısını (`..._TopCoW` etiket haritası) önceden hazırlayıp TOF görüntüsüyle birlikte dağıtmasıdır. Kursiyer yalnızca *TopCoW labels (optional)* kutusunun yanındaki **Load file…** düğmesine basıp bu dosyayı seçer; dosya etiket haritası olarak yüklenir ve kendiliğinden seçilir.
 
 ### Bilgisayar gereksinimleri
 
