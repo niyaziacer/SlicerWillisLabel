@@ -140,15 +140,15 @@ Ekran kartınızı görmek için: **Görev Yöneticisi → Performans → GPU**.
 
 ### 3. TopCoW'u bir olguda çalıştırma
 
-1. Slicer'da TOF görüntüsünü açın ve **Willis Label** modülünde *TOF volume* olarak seçin.
-2. **View → Python Console**'a şunu yazın (yol, SlicerWillisLabel klasörünüzün yeri olmalı):
+Her olgu için ayrı bir TopCoW dosyası gerekir; bir kişinin TopCoW dosyası başka birinin görüntüsünde kullanılamaz (modül bunu fark eder ve etiketlemeyi durdurur).
 
-   ```
-   exec(open(r"C:\Users\LENOVO\Desktop\SlicerWillisLabel\Docs\topcow_calistir.py", encoding="utf-8").read())
-   ```
+1. Docker Desktop'ı açın (simgesi görev çubuğunda yeşil "running" olmalı).
+2. Slicer'da TOF görüntüsünü açın ve **Willis Label** modülünde *TOF volume* olarak seçin.
+3. *TopCoW labels (optional)* satırındaki **Run TopCoW…** düğmesine basın ve onaylayın.
+4. Slicer yaklaşık 2 dakika donmuş görünür; bu normaldir. Bitince sonuç TOF dosyasının yanına `<TOF adı>_TopCoW.mha` olarak kaydedilir ve kutuda kendiliğinden seçilir.
+5. **Extract arteries** ve **Label arteries**'e basın.
 
-3. Slicer 2–3 dakika donmuş görünebilir; bu normaldir. Sonunda konsolda `TopCoW tamamlandı` yazar ve sonuç *TopCoW labels (optional)* kutusuna kendiliğinden seçilir.
-4. **Extract arteries** ve **Label arteries**'e basın. İsterseniz önce VA, SCA, AICA, PICA için elle nokta ekleyin.
+Aynı olguyu sonra yeniden açtığınızda TopCoW'u tekrar çalıştırmanız gerekmez: **Load file…** ile TOF'un yanındaki `_TopCoW.mha` dosyasını seçin.
 
 Ara dosyalar `C:\Users\<kullanıcı>\WillisLabel_TopCoW\` klasöründe tutulur. Sonuç ayrıca TOF dosyasının yanına `<TOF adı>_TopCoW.mha` olarak kopyalanır; **Load file…** penceresi de TOF'un klasöründe açılır, böylece bir sonraki sefer dosyayı hemen bulursunuz.
 

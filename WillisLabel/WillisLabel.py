@@ -132,6 +132,11 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.topcowLoadButton = qt.QPushButton("Load file…")
         self.topcowLoadButton.toolTip = ("Load a TopCoW output (.mha / .nii.gz) as a label map and select it here")
         tcRow.addWidget(self.topcowLoadButton)
+        self.topcowRunButton = qt.QPushButton("Run TopCoW…")
+        self.topcowRunButton.toolTip = ("Run the TopCoW model (Docker image topcow24_ct:latest) on the selected TOF. "
+                                        "The result is saved next to the TOF as <name>_TopCoW.mha and selected here. "
+                                        "Takes about 2 minutes with an NVIDIA GPU.")
+        tcRow.addWidget(self.topcowRunButton)
         f.addRow("TopCoW labels (optional):", tcRow)
 
         # ---- 3. Label
@@ -206,6 +211,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.exportButton.connect("clicked()", self.onExport)
         self.pickButton.connect("clicked()", self.onPickBranch)
         self.topcowLoadButton.connect("clicked()", self.onLoadTopCoW)
+        self.topcowRunButton.connect("clicked()", self.onRunTopCoW)
         self.undoButton.connect("clicked()", self.onUndoCorrection)
         self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputChanged)
         self.onInputChanged(self.inputSelector.currentNode())
@@ -305,6 +311,20 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             if vol is not None and vol.GetName().split("_")[0][:6] not in base:
                 slicer.util.warningDisplay(
                     f"Check that the TopCoW file belongs to this image:\nTOF: {vol.GetName()}\nTopCoW: {base}")
+
+    def onRunTopCoW(self):
+        vol = self.inputSelector.currentNode()
+        if vol is None:
+            slicer.util.errorDisplay("Select the TOF volume first.")
+            return
+        if not slicer.util.confirmOkCancelDisplay(
+                f"Run TopCoW on '{vol.GetName()}'?\n\nDocker Desktop must be running. Slicer will not respond "
+                "for about 2 minutes (GPU) or longer (CPU)."):
+            return
+        with slicer.util.tryWithErrorDisplay("TopCoW failed.", waitCursor=True):
+            node, path, secs = self.logic.runTopCoW(vol)
+            self.topcowSelector.setCurrentNode(node)
+            self.resultText.appendPlainText(f"TopCoW finished in {secs:.0f} s, saved to {path}")
 
     def _fixAbbr(self):
         i = self.fixCombo.currentIndex
@@ -443,6 +463,49 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             return slicer.util.arrayFromVolume(lab) > 0
         finally:
             slicer.mrmlScene.RemoveNode(lab)
+
+    def runTopCoW(self, volumeNode, image="topcow24_ct:latest", useGpu=True):
+        """Run the TopCoW Docker model on a TOF volume. Returns (labelmap node, saved path, seconds)."""
+        import shutil
+        import subprocess
+        import SimpleITK as sitk
+        import sitkUtils
+        if shutil.which("docker") is None:
+            raise RuntimeError("Docker was not found. Install Docker Desktop and load the TopCoW image (see guide).")
+        t0 = time.time()
+        work = os.path.join(os.path.expanduser("~"), "WillisLabel_TopCoW", volumeNode.GetName())
+        indir, outdir = os.path.join(work, "in"), os.path.join(work, "out")
+        shutil.rmtree(work, ignore_errors=True)
+        for sub in ("head-mr-angio", "head-ct-angio"):
+            os.makedirs(os.path.join(indir, "images", sub))
+        os.makedirs(outdir)
+        img = sitk.DICOMOrient(sitkUtils.PullVolumeFromSlicer(volumeNode), "LPS")  # the model expects LPS
+        for sub in ("head-mr-angio", "head-ct-angio"):
+            sitk.WriteImage(img, os.path.join(indir, "images", sub, "tof.nii.gz"))
+
+        def run(gpu):
+            cmd = ["docker", "run", "--rm", "--network", "none", "--shm-size=8g"]
+            if gpu:
+                cmd += ["--gpus", "all"]
+            cmd += ["-v", f"{indir}:/input:ro", "-v", f"{outdir}:/output", image]
+            return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+        r = run(useGpu)
+        result = os.path.join(outdir, "images", "cow-multiclass-segmentation", "output.mha")
+        if not os.path.exists(result) and useGpu:
+            r = run(False)  # no NVIDIA GPU: try on the CPU (slow, not validated)
+        if not os.path.exists(result):
+            raise RuntimeError("TopCoW produced no output.\n" + (r.stderr or r.stdout)[-1500:])
+        sn = volumeNode.GetStorageNode()
+        folder = os.path.dirname(sn.GetFileName()) if sn and sn.GetFileName() else work
+        saved = os.path.join(folder, volumeNode.GetName() + "_TopCoW.mha")
+        try:
+            shutil.copyfile(result, saved)
+        except OSError:
+            saved = result
+        node = slicer.util.loadLabelVolume(saved)
+        node.SetName(volumeNode.GetName() + "_TopCoW")
+        return node, saved, time.time() - t0
 
     def labelmapOnGrid(self, labelNode, volumeNode):
         """Label map values resampled (nearest neighbour, in physical space) onto the volume's grid.
