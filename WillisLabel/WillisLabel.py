@@ -293,9 +293,18 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             return
         with slicer.util.tryWithErrorDisplay("Could not load the TopCoW file.", waitCursor=True):
             node = slicer.util.loadLabelVolume(path)
-            vol = self.inputSelector.currentNode()
-            node.SetName((vol.GetName() if vol else os.path.basename(path).split(".")[0]) + "_TopCoW")
+            base = os.path.basename(path)
+            for ext in (".nii.gz", ".mha", ".nii", ".nrrd"):
+                if base.endswith(ext):
+                    base = base[: -len(ext)]
+            if base == "output":   # raw Docker output: name it after the folder it came from
+                base = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(path))))) + "_TopCoW"
+            node.SetName(base)
             self.topcowSelector.setCurrentNode(node)
+            vol = self.inputSelector.currentNode()
+            if vol is not None and vol.GetName().split("_")[0][:6] not in base:
+                slicer.util.warningDisplay(
+                    f"Check that the TopCoW file belongs to this image:\nTOF: {vol.GetName()}\nTopCoW: {base}")
 
     def _fixAbbr(self):
         i = self.fixCombo.currentIndex
@@ -458,11 +467,20 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         tcNotes, tcVariants, tcSeeds = [], None, {}
         if topcowNode is not None:
             tc = self.labelmapOnGrid(topcowNode, volumeNode)
+            # TopCoW labels must lie on this image's bright vessels; if most of them do not, the file
+            # belongs to another subject or another acquisition
+            inside = float(((tc > 0) & mask).sum()) / max(int((tc > 0).sum()), 1)
+            if inside < 0.6:
+                raise ValueError(
+                    f"Only {inside:.0%} of the TopCoW labels lie on arteries of this image. "
+                    "The TopCoW file probably belongs to another subject or scan "
+                    f"('{topcowNode.GetName()}' for '{volumeNode.GetName()}'). Load the matching TopCoW file.")
             mask = mask | (tc > 0)
             tcSeeds, _, tcNotes = topcow.seeds_from_topcow(tc, spacing)
             tcVariants = topcow.variant_summary(tc)
             tcVol = {topcow.TOPCOW[v]: float((tc == v).sum() * np.prod(spacing)) for v in topcow.TOPCOW if (tc == v).any()}
-            tcNotes.insert(0, "TopCoW classes on this grid (mm³): " + ", ".join(f"{k} {v:.0f}" for k, v in tcVol.items()))
+            tcNotes.insert(0, f"TopCoW file '{topcowNode.GetName()}': {inside:.0%} of its labels lie on extracted arteries")
+            tcNotes.insert(1, "TopCoW classes on this grid (mm³): " + ", ".join(f"{k} {v:.0f}" for k, v in tcVol.items()))
         if not raw and not tcSeeds:
             raise ValueError("No seed points have been placed and no TopCoW labels were given.")
         rad = tuple(max(1, int(round(2.0 / s))) for s in spacing)  # search 2 mm around each seed
