@@ -85,10 +85,10 @@ Bu örnekte 12 nokta yerleştirildi: BA, ICA R/L, MCA R/L, A1 R, AComA, A2 L, P1
 Otomatik etiketler bir öneridir; son kararı anatomist verir.
 
 1. **4. Correct labels (anatomist)** bölümünde doğru adı seçin. Listede olmayan bir adı kutuya yazabilirsiniz.
-2. **Pick branch**'e basın ve yanlış adlandırılmış dala, **çıkışına yakın bir yerden** tıklayın.
-3. Tıkladığınız noktadan ileriye (kalpten uzağa) uzanan ve aynı yanlış adı taşıyan bölüm yeni adı alır. Daha ilerideki başka adlı dallara dokunulmaz.
-4. Önce proksimal (gövde) hatalarını, sonra distal dalları düzeltin. Örneğin önce baziller gövdeyi, sonra SCA'yı.
-5. **Undo last correction** son beş düzeltmeyi geri alır.
+2. **Mode** kutusunda iki seçenek var:
+   - **Segment between two clicks** (varsayılan): **Pick branch**'e basın, yanlış segmentin **başına** sonra **sonuna** tıklayın. Yalnızca iki tıklama arasındaki damar yeni adı alır. Willis halkası bir döngü olduğu için halkanın içindeki düzeltmeler (PComA, P1, A1, AComA) bu kipte yapılmalı.
+   - **Branch from the click onwards**: tek tıklama; tıklanan noktadan kalpten uzağa uzanan ve aynı yanlış adı taşıyan bölüm yeni adı alır. Halkanın dışındaki dallar (SCA, MCA dalları gibi) için hızlıdır.
+3. **Undo last correction** son beş düzeltmeyi geri alır.
 
 Her düzeltme raporun sonuna yazılır ve segmentasyonla birlikte saklanır. Düzeltilmiş olgular ileride yöntemin doğruluğunu ölçmek için kullanılabilir.
 

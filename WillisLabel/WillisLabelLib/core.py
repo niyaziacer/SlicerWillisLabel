@@ -304,6 +304,53 @@ def relabel_branch(lab, point, new_val, spacing, si_axis=2, snap_mm=3.0, section
     return lab, dict(old=old, n=int(m.sum()))
 
 
+def relabel_path(lab, p1, p2, new_val, spacing, snap_mm=3.0, margin_mm=0.5):
+    """Give `new_val` to the vessel segment between two clicked points.
+
+    The centred path between the points is traced through the vessel (any label); every voxel
+    within the vessel radius of that path is renamed. Unlike relabel_branch this does not depend
+    on a flow direction, so it also works inside the circle of Willis, which is a loop.
+    Returns (lab, dict(n=renamed voxels, olds={value: count})) or (lab, None).
+    """
+    spacing = np.asarray(spacing, float)
+    fg = lab > 0
+
+    def snap(p):
+        p = np.asarray(p, int)
+        if fg[tuple(p)]:
+            return p
+        r = np.maximum(1, np.round(snap_mm / spacing)).astype(int)
+        lo = np.maximum(p - r, 0); hi = np.minimum(p + r + 1, lab.shape)
+        sub = np.argwhere(fg[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]]) + lo
+        if not len(sub):
+            return None
+        return sub[np.argmin(np.linalg.norm((sub - p) * spacing, axis=1))]
+
+    a, b = snap(p1), snap(p2)
+    if a is None or b is None:
+        return lab, None
+    lo = np.maximum(np.minimum(a, b) - np.round(40 / spacing).astype(int), 0)
+    hi = np.minimum(np.maximum(a, b) + np.round(40 / spacing).astype(int) + 1, lab.shape)
+    cr = tuple(slice(x, y) for x, y in zip(lo, hi))
+    sub = fg[cr]
+    edt = ndi.distance_transform_edt(sub, sampling=spacing)
+    J = np.argwhere(sub)
+    g = VoxelGraph(sub, spacing, node_weight=1.0 / (edt[tuple(J.T)] + 0.15) ** 2)
+    ia, ib = int(g.index[tuple(a - lo)]), int(g.index[tuple(b - lo)])
+    path = g.path(ia, ib)
+    if path is None:
+        return lab, None
+    pm = np.zeros(sub.shape, bool)
+    pm[tuple(g.coords[path].T)] = True
+    R = float(np.percentile(edt[pm], 90))
+    tube = sub & (ndi.distance_transform_edt(~pm, sampling=spacing) <= R + margin_mm)
+    cc, _ = ndi.label(tube, structure=STRUCT26)
+    tube = cc == cc[tuple(a - lo)]
+    vals, counts = np.unique(lab[cr][tube], return_counts=True)
+    lab[cr][tube] = new_val
+    return lab, dict(n=int(tube.sum()), olds={int(v): int(c) for v, c in zip(vals, counts) if v != new_val})
+
+
 # ---------------------------------------------------------------------------
 # 3. Seed-based geodesic labelling
 # ---------------------------------------------------------------------------

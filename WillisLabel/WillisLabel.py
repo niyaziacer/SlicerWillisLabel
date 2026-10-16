@@ -155,9 +155,10 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         box = ctk.ctkCollapsibleButton(); box.text = "4. Correct labels (anatomist)"
         self.layout.addWidget(box); f = qt.QFormLayout(box)
         info = qt.QLabel(
-            "Wrong name? Choose the correct artery, press 'Pick branch' and click on the wrong branch "
-            "close to its origin. Everything from that point onwards that carries the same (wrong) name "
-            "is renamed. Correct proximal errors first, then distal ones. You can also type a new name.")
+            "Wrong name? Choose the correct artery and press 'Pick branch'. "
+            "Segment mode (default): click the start and then the end of the wrong segment; only the "
+            "vessel between the two clicks is renamed (works inside the circle of Willis). "
+            "Branch mode: one click near the origin renames that branch onwards. You can type a new name.")
         info.wordWrap = True
         f.addRow(info)
         self.fixCombo = qt.QComboBox(); self.fixCombo.editable = True
@@ -166,6 +167,10 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         for abbr in ("SCA R rami", "BA rami", anatomy.NON_VASCULAR[0], anatomy.UNCONNECTED[0]):
             self.fixCombo.addItem(abbr, abbr)
         f.addRow("Correct name:", self.fixCombo)
+        self.fixModeCombo = qt.QComboBox()
+        self.fixModeCombo.addItem("Segment between two clicks (start and end)", "path")
+        self.fixModeCombo.addItem("Branch from the click onwards", "branch")
+        f.addRow("Mode:", self.fixModeCombo)
         row = qt.QHBoxLayout()
         self.pickButton = qt.QPushButton("Pick branch")
         self.undoButton = qt.QPushButton("Undo last correction")
@@ -173,6 +178,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         f.addRow(row)
         self._fixNode = None
         self._fixObserver = None
+        self._fixFirst = None
 
         # ---- 5. Export
         box = ctk.ctkCollapsibleButton(); box.text = "5. Export"; box.collapsed = True
@@ -303,11 +309,14 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             self._fixObserver = self._fixNode.AddObserver(
                 slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self._onFixPoint)
         self._fixNode.SetControlPointLabelFormat("fix:" + self._fixAbbr())
+        self._fixFirst = None
+        if self.fixModeCombo.currentData == "path":
+            self.resultText.appendPlainText(f"{self._fixAbbr()}: click the START of the segment, then its END.")
         selectionNode = slicer.app.applicationLogic().GetSelectionNode()
         selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
         selectionNode.SetActivePlaceNodeID(self._fixNode.GetID())
         interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-        interactionNode.SetPlaceModePersistence(0)   # one click = one correction
+        interactionNode.SetPlaceModePersistence(1 if self.fixModeCombo.currentData == "path" else 0)
         interactionNode.SetCurrentInteractionMode(interactionNode.Place)
 
     def _onFixPoint(self, caller, event):
@@ -317,6 +326,17 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         ras = [0.0, 0.0, 0.0]
         caller.GetNthControlPointPositionWorld(n - 1, ras)
         abbr = self._fixAbbr()
+        if self.fixModeCombo.currentData == "path":
+            if getattr(self, "_fixFirst", None) is None:
+                self._fixFirst = list(ras)
+                self.resultText.appendPlainText("Start set – now click the END of the segment.")
+                return
+            first, self._fixFirst = self._fixFirst, None
+            interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+            interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+            with slicer.util.tryWithErrorDisplay("Correction failed.", waitCursor=True):
+                self.resultText.appendPlainText(self.logic.applyCorrectionPath(first, ras, abbr))
+            return
         with slicer.util.tryWithErrorDisplay("Correction failed.", waitCursor=True):
             line = self.logic.applyCorrection(ras, abbr)
             self.resultText.appendPlainText(line)
@@ -577,13 +597,43 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         st["seg"].SetAttribute("WillisLabel.corrections", "\n".join(st["log"]))
         return line
 
+    def _kji(self, ras):
+        st = self.state
+        m = vtk.vtkMatrix4x4(); st["vol"].GetRASToIJKMatrix(m)
+        ijk = m.MultiplyPoint(list(ras) + [1.0])[:3]
+        kji = [int(round(c)) for c in ijk[::-1]]
+        return tuple(min(max(c, 0), n - 1) for c, n in zip(kji, st["lab"].shape))
+
+    def applyCorrectionPath(self, ras1, ras2, newAbbr):
+        """Rename the vessel segment between two clicked points (RAS). Returns a report line."""
+        st = getattr(self, "state", None)
+        if not st:
+            raise ValueError("Run 'Label arteries' first.")
+        new = self._valueOf(newAbbr)
+        before = st["lab"].copy()
+        lab, info = core.relabel_path(st["lab"], self._kji(ras1), self._kji(ras2), new, st["spacing"])
+        if info is None:
+            return "No vessel path between the two clicks – nothing changed."
+        olds = list(info["olds"])
+        st["undo"] = (st["undo"] + [(before, olds, new)])[-5:]
+        for v in olds:
+            self._writeSegment(self._abbrOf(v), lab == v)
+        self._writeSegment(newAbbr, lab == new)
+        st["seg"].CreateClosedSurfaceRepresentation()
+        vox = float(np.prod(st["spacing"]))
+        frm = ", ".join(f"{self._abbrOf(v)} {c * vox:.0f} mm³" for v, c in info["olds"].items())
+        line = f"Correction (segment): -> {newAbbr} ({frm or 'no change'})"
+        st["log"].append(line)
+        st["seg"].SetAttribute("WillisLabel.corrections", "\n".join(st["log"]))
+        return line
+
     def undoCorrection(self):
         st = getattr(self, "state", None)
         if not st or not st["undo"]:
             return "Nothing to undo."
         before, old, new = st["undo"].pop()
         st["lab"][...] = before
-        for v in (old, new):
+        for v in (list(old) if isinstance(old, (list, tuple)) else [old]) + [new]:
             self._writeSegment(self._abbrOf(v), before == v)
         st["seg"].CreateClosedSurfaceRepresentation()
         st["log"].append("Undo: " + (st["log"][-1] if st["log"] else ""))

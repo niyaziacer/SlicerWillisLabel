@@ -116,3 +116,16 @@ def test_relabel_branch_renames_only_downstream_same_label():
     assert lab[52, 30, 12] == 9                      # distal right branch renamed
     assert lab[10, 30, 30] == ba                     # trunk untouched
     assert lab[52, 30, 48] == 2                      # other branch untouched
+
+
+def test_relabel_path_only_between_clicks_in_a_loop():
+    # a ring (like the circle of Willis): renaming one arc must not spread around the loop
+    lab = np.zeros((10, 60, 60), np.uint8)
+    jj, ii = np.mgrid[0:60, 0:60]
+    r = np.hypot(jj - 30, ii - 30)
+    lab[3:7][:, (r >= 18) & (r <= 21)] = 1
+    lab, info = core.relabel_path(lab, (5, 30, 49), (5, 49, 30), 7, (1, 1, 1))
+    assert info["n"] > 50
+    assert lab[5, 44, 44] == 7          # on the arc between the clicks
+    assert lab[5, 30, 11] == 1          # opposite side of the ring untouched
+    assert lab[5, 11, 30] == 1
