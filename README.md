@@ -56,6 +56,10 @@ After labelling, the A2 territory is analysed by **course** and **origin**. The 
 - A single pericallosal artery is reported as a possible azygos or bihemispheric ACA.
 - All variation findings are flagged `VARYASYON – anatomist onayı gerekli` (variation, anatomist review required).
 
+## Correcting labels (anatomist in the loop)
+
+Automatic labels are a proposal. In *4. Correct labels*, choose the correct name, press **Pick branch** and click on the wrong branch near its origin. Everything downstream of the click that carries the same (wrong) name is renamed; other labels further on are not touched, so a wrong trunk can be fixed without renaming its correct branches. Correct proximal errors first. *Undo last correction* reverts up to five steps. Every correction is listed in the report and stored on the segmentation node (attribute `WillisLabel.corrections`), so corrected cases can later serve as validation data.
+
 ## Notes and limitations
 
 - **"Not visualised" is not "absent".** Slow-flow or sub-millimetre vessels (often AComA or a hypoplastic PComA) may not appear on TOF. Arteries left without a seed are listed as *not seeded*, not as missing.

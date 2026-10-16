@@ -146,8 +146,31 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.resultText.setMinimumHeight(160)
         f.addRow(self.resultText)
 
-        # ---- 4. Export
-        box = ctk.ctkCollapsibleButton(); box.text = "4. Export"; box.collapsed = True
+        # ---- 4. Corrections by the anatomist
+        box = ctk.ctkCollapsibleButton(); box.text = "4. Correct labels (anatomist)"
+        self.layout.addWidget(box); f = qt.QFormLayout(box)
+        info = qt.QLabel(
+            "Wrong name? Choose the correct artery, press 'Pick branch' and click on the wrong branch "
+            "close to its origin. Everything from that point onwards that carries the same (wrong) name "
+            "is renamed. Correct proximal errors first, then distal ones. You can also type a new name.")
+        info.wordWrap = True
+        f.addRow(info)
+        self.fixCombo = qt.QComboBox(); self.fixCombo.editable = True
+        for abbr, latin, *_ in anatomy.ARTERIES:
+            self.fixCombo.addItem(f"{abbr}  –  {latin}", abbr)
+        for abbr in ("SCA R rami", "BA rami", anatomy.NON_VASCULAR[0], anatomy.UNCONNECTED[0]):
+            self.fixCombo.addItem(abbr, abbr)
+        f.addRow("Correct name:", self.fixCombo)
+        row = qt.QHBoxLayout()
+        self.pickButton = qt.QPushButton("Pick branch")
+        self.undoButton = qt.QPushButton("Undo last correction")
+        row.addWidget(self.pickButton); row.addWidget(self.undoButton)
+        f.addRow(row)
+        self._fixNode = None
+        self._fixObserver = None
+
+        # ---- 5. Export
+        box = ctk.ctkCollapsibleButton(); box.text = "5. Export"; box.collapsed = True
         self.layout.addWidget(box); f = qt.QFormLayout(box)
         self.exportDir = ctk.ctkDirectoryButton()
         self.exportDir.directory = os.path.expanduser("~")
@@ -164,6 +187,8 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.arteryCombo.connect("currentIndexChanged(int)", self.onArteryChanged)
         self.labelButton.connect("clicked()", self.onLabel)
         self.exportButton.connect("clicked()", self.onExport)
+        self.pickButton.connect("clicked()", self.onPickBranch)
+        self.undoButton.connect("clicked()", self.onUndoCorrection)
         self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputChanged)
         self.onInputChanged(self.inputSelector.currentNode())
 
@@ -236,6 +261,46 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
                                                    topcowNode=tc)
             self.labelSegNode = seg
             self.resultText.setPlainText(report)
+
+    def _fixAbbr(self):
+        i = self.fixCombo.currentIndex
+        txt = self.fixCombo.currentText
+        if i >= 0 and self.fixCombo.itemText(i) == txt:
+            return self.fixCombo.itemData(i)
+        return txt.split("  –  ")[0].strip()   # typed by the user
+
+    def onPickBranch(self):
+        if not getattr(self.logic, "state", None):
+            slicer.util.errorDisplay("Run 'Label arteries' first.")
+            return
+        if self._fixNode is None or slicer.mrmlScene.GetNodeByID(self._fixNode.GetID()) is None:
+            self._fixNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "WillisLabel corrections")
+            self._fixNode.CreateDefaultDisplayNodes()
+            self._fixNode.GetDisplayNode().SetSelectedColor(1.0, 1.0, 0.0)
+            self._fixObserver = self._fixNode.AddObserver(
+                slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self._onFixPoint)
+        self._fixNode.SetControlPointLabelFormat("fix:" + self._fixAbbr())
+        selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+        selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+        selectionNode.SetActivePlaceNodeID(self._fixNode.GetID())
+        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+        interactionNode.SetPlaceModePersistence(0)   # one click = one correction
+        interactionNode.SetCurrentInteractionMode(interactionNode.Place)
+
+    def _onFixPoint(self, caller, event):
+        n = caller.GetNumberOfControlPoints()
+        if n == 0:
+            return
+        ras = [0.0, 0.0, 0.0]
+        caller.GetNthControlPointPositionWorld(n - 1, ras)
+        abbr = self._fixAbbr()
+        with slicer.util.tryWithErrorDisplay("Correction failed.", waitCursor=True):
+            line = self.logic.applyCorrection(ras, abbr)
+            self.resultText.appendPlainText(line)
+
+    def onUndoCorrection(self):
+        with slicer.util.tryWithErrorDisplay("Undo failed.", waitCursor=True):
+            self.resultText.appendPlainText(self.logic.undoCorrection())
 
     def onExport(self):
         seg = self.labelSegNode
@@ -433,7 +498,76 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         for p, r in fixReport.items():
             lines.append(f"Origin correction {p}: {r['stubs']} branch stubs, {r['moved_vox']} voxels re-assigned")
         lines.append(f"Done in {time.time() - t0:.1f} s")
+        # kept for anatomist corrections (section 4)
+        self.state = dict(seg=seg, vol=volumeNode, lab=lab, names=list(names), spacing=spacing, undo=[], log=[])
         return seg, "\n".join(lines)
+
+    # ------------------------------------------------------------- correction
+    def _abbrOf(self, value):
+        st = self.state
+        if value == core.UNCONNECTED:
+            return anatomy.UNCONNECTED[0]
+        return st["names"][value - 1]
+
+    def _valueOf(self, abbr):
+        st = self.state
+        if abbr == anatomy.UNCONNECTED[0]:
+            return core.UNCONNECTED
+        if abbr not in st["names"]:
+            st["names"].append(abbr)
+        return st["names"].index(abbr) + 1
+
+    def _writeSegment(self, abbr, mask):
+        st = self.state
+        segmentation = st["seg"].GetSegmentation()
+        if segmentation.GetSegment(abbr) is None:
+            if abbr == anatomy.UNCONNECTED[0]:
+                name, col = anatomy.UNCONNECTED[0], anatomy.UNCONNECTED[2]
+            else:
+                name, col = anatomy.segment_name(abbr), anatomy.colour(abbr, len(st["names"]))
+            segmentation.AddEmptySegment(abbr, name)
+            segmentation.GetSegment(abbr).SetColor(*col)
+        slicer.util.updateSegmentBinaryLabelmapFromArray(mask.astype(np.uint8), st["seg"], abbr, st["vol"])
+
+    def applyCorrection(self, ras, newAbbr):
+        """Rename the branch from the clicked point (RAS) onwards. Returns a report line."""
+        st = getattr(self, "state", None)
+        if not st:
+            raise ValueError("Run 'Label arteries' first.")
+        m = vtk.vtkMatrix4x4(); st["vol"].GetRASToIJKMatrix(m)
+        ijk = m.MultiplyPoint(list(ras) + [1.0])[:3]
+        kji = tuple(int(round(c)) for c in ijk[::-1])
+        kji = tuple(min(max(c, 0), n - 1) for c, n in zip(kji, st["lab"].shape))
+        new = self._valueOf(newAbbr)
+        before = st["lab"].copy()
+        lab, info = core.relabel_branch(st["lab"], kji, new, st["spacing"], si_axis=self._siAxisKJI(st["vol"]))
+        if info is None:
+            return "No vessel within 3 mm of the click – nothing changed."
+        if info["old"] == new:
+            return f"That branch is already {newAbbr}."
+        st["undo"] = (st["undo"] + [(before, info["old"], new)])[-5:]
+        oldAbbr = self._abbrOf(info["old"])
+        self._writeSegment(oldAbbr, lab == info["old"])
+        self._writeSegment(newAbbr, lab == new)
+        st["seg"].CreateClosedSurfaceRepresentation()
+        mm3 = info["n"] * float(np.prod(st["spacing"]))
+        line = f"Correction: {oldAbbr} -> {newAbbr} ({mm3:.0f} mm³) at RAS ({ras[0]:.1f}, {ras[1]:.1f}, {ras[2]:.1f})"
+        st["log"].append(line)
+        st["seg"].SetAttribute("WillisLabel.corrections", "\n".join(st["log"]))
+        return line
+
+    def undoCorrection(self):
+        st = getattr(self, "state", None)
+        if not st or not st["undo"]:
+            return "Nothing to undo."
+        before, old, new = st["undo"].pop()
+        st["lab"][...] = before
+        for v in (old, new):
+            self._writeSegment(self._abbrOf(v), before == v)
+        st["seg"].CreateClosedSurfaceRepresentation()
+        st["log"].append("Undo: " + (st["log"][-1] if st["log"] else ""))
+        st["seg"].SetAttribute("WillisLabel.corrections", "\n".join(st["log"]))
+        return "Last correction undone."
 
     # ------------------------------------------------------------------ export
     def exportSTL(self, segNode, folder):

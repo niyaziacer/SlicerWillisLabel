@@ -80,7 +80,19 @@ Bu örnekte 12 nokta yerleştirildi: BA, ICA R/L, MCA R/L, A1 R, AComA, A2 L, P1
 
 ![Etiketli sonuç – dörtlü görünüm](07_etiketli_dortlu.png)
 
-## Adım 8 – Dışa aktarın (3B baskı için)
+## Adım 8 – Yanlış etiketleri düzeltin (anatomist)
+
+Otomatik etiketler bir öneridir; son kararı anatomist verir.
+
+1. **4. Correct labels (anatomist)** bölümünde doğru adı seçin. Listede olmayan bir adı kutuya yazabilirsiniz.
+2. **Pick branch**'e basın ve yanlış adlandırılmış dala, **çıkışına yakın bir yerden** tıklayın.
+3. Tıkladığınız noktadan ileriye (kalpten uzağa) uzanan ve aynı yanlış adı taşıyan bölüm yeni adı alır. Daha ilerideki başka adlı dallara dokunulmaz.
+4. Önce proksimal (gövde) hatalarını, sonra distal dalları düzeltin. Örneğin önce baziller gövdeyi, sonra SCA'yı.
+5. **Undo last correction** son beş düzeltmeyi geri alır.
+
+Her düzeltme raporun sonuna yazılır ve segmentasyonla birlikte saklanır. Düzeltilmiş olgular ileride yöntemin doğruluğunu ölçmek için kullanılabilir.
+
+## Adım 9 – Dışa aktarın (3B baskı için)
 
 **4. Export** bölümünde bir klasör seçin ve **Export each artery as STL**'e basın. Her arter ayrı bir STL dosyası olarak kaydedilir.
 

@@ -240,6 +240,71 @@ def flag_thick_rami(lab, names, mask, spacing, max_radius_mm=1.8, min_mm3=50.0, 
 
 
 # ---------------------------------------------------------------------------
+# 5. Anatomist correction: rename a branch from a clicked point onwards
+# ---------------------------------------------------------------------------
+def relabel_branch(lab, point, new_val, spacing, si_axis=2, snap_mm=3.0, section_mm=4.0):
+    """Give `new_val` to the branch that starts at `point` and runs away from the heart.
+
+    The direction "away from the heart" is taken from the vessel tree itself: arteries enter
+    the TOF slab from below, so geodesic distance is measured from the lowest voxels of the
+    connected vessel piece. Every voxel downstream of the clicked cross-section that carries the
+    same label as the clicked voxel is renamed; other labels further on are left alone, so a wrong
+    trunk can be corrected without renaming its correctly labelled branches. A click on an
+    'Unconnected' piece renames the whole piece.
+
+    Returns (lab, dict(old=value, n=renamed voxels)) or (lab, None) if nothing was hit.
+    """
+    spacing = np.asarray(spacing, float)
+    point = np.asarray(point, int)
+    fg = lab > 0
+    if not fg[tuple(point)]:  # snap to the nearest vessel voxel within snap_mm
+        r = np.maximum(1, np.round(snap_mm / spacing)).astype(int)
+        lo = np.maximum(point - r, 0); hi = np.minimum(point + r + 1, lab.shape)
+        sub = np.argwhere(fg[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]]) + lo
+        if not len(sub):
+            return lab, None
+        point = sub[np.argmin(np.linalg.norm((sub - point) * spacing, axis=1))]
+    old = int(lab[tuple(point)])
+    comp, _ = ndi.label(fg, structure=STRUCT26)
+    piece = comp == comp[tuple(point)]
+    if old == UNCONNECTED:
+        sel = piece & (lab == old)
+        lab[sel] = new_val
+        return lab, dict(old=old, n=int(sel.sum()))
+    I = np.argwhere(piece)
+    lo = I.min(0); hi = I.max(0) + 1
+    cr = tuple(slice(a, b) for a, b in zip(lo, hi))
+    g = VoxelGraph(piece[cr], spacing)
+    C = g.coords
+    band = max(1, int(round(3.0 / spacing[si_axis])))
+    # roots: thick vessels entering at the bottom of the slab (VA, BA, ICA); a thin branch that
+    # happens to reach the bottom (e.g. an SCA loop) is not an inflow
+    edt = ndi.distance_transform_edt(piece[cr], sampling=spacing)[tuple(C.T)]
+    low = C[:, si_axis] < C[:, si_axis].min() + band
+    roots = np.nonzero(low & (edt >= 0.45 * edt[low].max()))[0]
+    d, pred, _ = csgraph.dijkstra(g.graph, directed=False, indices=roots, min_only=True,
+                                  return_predecessors=True)
+    c = int(g.index[tuple(point - lo)])
+    lv = lab[cr][tuple(C.T)]
+    # the clicked cross-section: same geodesic depth, close to the click, same label
+    near = np.linalg.norm((C - C[c]) * spacing, axis=1) <= section_mm
+    sect = near & (np.abs(d - d[c]) <= float(spacing.max())) & (lv == old)
+    sect[c] = True
+    desc = sect.copy()
+    for i in np.argsort(d):
+        if not desc[i] and pred[i] >= 0 and desc[pred[i]]:
+            desc[i] = True
+    sel_nodes = desc & (lv == old)
+    m = np.zeros(piece[cr].shape, bool)
+    m[tuple(C[sel_nodes].T)] = True
+    # keep the part connected to the click
+    cc, _ = ndi.label(m, structure=STRUCT26)
+    m = cc == cc[tuple(C[c])]
+    lab[cr][m] = new_val
+    return lab, dict(old=old, n=int(m.sum()))
+
+
+# ---------------------------------------------------------------------------
 # 3. Seed-based geodesic labelling
 # ---------------------------------------------------------------------------
 def label_from_seeds(mask, seeds, spacing, graph=None):

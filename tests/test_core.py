@@ -101,3 +101,18 @@ def test_bridge_fragments_joins_faint_thin_branch_not_blob():
     assert lab[20, 20, 5] == lab[20, 20, 50]          # branch joined
     assert lab[5, 5, 64] != lab[20, 20, 5]            # blob not joined
     assert rep["joined"] == 1 and rep["rejected_thick"] == 1
+
+
+def test_relabel_branch_renames_only_downstream_same_label():
+    arr, truth = synthetic_y()
+    # trunk BA (k<35), branches P1 R / P1 L; the right branch is wrongly labelled BA (1)
+    kk, jj, ii = np.mgrid[0:60, 0:60, 0:60]
+    lab = np.where(truth, 1, 0).astype(np.uint8)
+    lab[truth & (kk >= 36) & (ii > 30)] = 2           # left branch correct: P1 L (2)
+    names, ba = ["BA", "P1 L"], 1
+    assert lab[52, 30, 12] == ba
+    lab, info = core.relabel_branch(lab, (45, 30, 19), 9, (1, 1, 1), si_axis=0)
+    assert info["old"] == ba and info["n"] > 20
+    assert lab[52, 30, 12] == 9                      # distal right branch renamed
+    assert lab[10, 30, 30] == ba                     # trunk untouched
+    assert lab[52, 30, 48] == 2                      # other branch untouched
