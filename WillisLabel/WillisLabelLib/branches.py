@@ -20,7 +20,7 @@ from scipy.sparse import coo_matrix, csgraph
 from . import core
 
 
-def split_branches(mask, spacing, si_axis=0, step_mm=1.0, min_branch_mm=4.0, min_size_mm3=5.0):
+def split_branches(mask, spacing, si_axis=0, step_mm=1.0, min_branch_mm=4.0, min_size_mm3=5.0, side_ratio=0.65):
     """Return (branch labelmap int32 with 0 = background, number of branches)."""
     spacing = np.asarray(spacing, float)
     out = np.zeros(mask.shape, np.int32)
@@ -34,14 +34,14 @@ def split_branches(mask, spacing, si_axis=0, step_mm=1.0, min_branch_mm=4.0, min
         if sizes[c] * vox < min_size_mm3:
             continue
         piece = comp[sl] == c
-        lab, k = _split_piece(piece, spacing, si_axis, step_mm, min_branch_mm)
+        lab, k = _split_piece(piece, spacing, si_axis, step_mm, min_branch_mm, side_ratio)
         sub = out[sl]
         sub[piece] = lab[piece] + next_id - 1
         next_id += k
     return out, next_id - 1
 
 
-def _split_piece(piece, spacing, si_axis, step_mm, min_branch_mm):
+def _split_piece(piece, spacing, si_axis, step_mm, min_branch_mm, side_ratio=0.65):
     g = core.VoxelGraph(piece, spacing)
     C = g.coords
     edt = ndi.distance_transform_edt(piece, sampling=spacing)[tuple(C.T)]
@@ -87,14 +87,40 @@ def _split_piece(piece, spacing, si_axis, step_mm, min_branch_mm):
             depth[parent[v]] = max(depth[parent[v]], depth[v])
     sublen = (depth - node_shell) * step_mm
 
+    # node radius (largest distance to the vessel wall) for telling a side branch from a true fork
+    node_r = np.zeros(nn); np.maximum.at(node_r, node, edt)   # centreline radius of each shell piece
+
+    def r_up(v, k_shells=3):
+        rs, u = [node_r[v]], parent[v]
+        while u >= 0 and node_shell[v] - node_shell[u] <= k_shells:
+            rs.append(node_r[u]); u = parent[u]
+        return float(np.mean(rs))
+
+    def r_down(c, k_shells=3):
+        rs, stack = [], [c]
+        while stack:
+            u = stack.pop()
+            rs.append(node_r[u])
+            stack.extend(w for w in children[u] if node_shell[w] - node_shell[c] <= k_shells)
+        return float(np.mean(rs))
+
     seg = -np.ones(nn, np.int64)
     k = 0
     for v in np.argsort(node_shell):
         if seg[v] < 0:           # root node (or a node whose parent was not linked)
             seg[v] = k; k += 1
         sig = [c for c in children[v] if sublen[c] + step_mm >= min_branch_mm]
+        cont = None
+        if len(sig) >= 2 and side_ratio > 0:
+            # a thin branch leaving a thick trunk is a side branch: the trunk keeps its number.
+            # Children of similar calibre (e.g. BA -> both P1s) are a true fork: the trunk ends there.
+            rd = [r_down(c) for c in sig]
+            i = int(np.argmax(rd))
+            others = [r for j, r in enumerate(rd) if j != i]
+            if rd[i] >= 0.6 * r_up(v) and max(others) <= side_ratio * rd[i]:
+                cont = sig[i]
         for c in children[v]:
-            if len(sig) >= 2 and c in sig:
+            if len(sig) >= 2 and c in sig and c != cont:
                 seg[c] = k; k += 1
             else:
                 seg[c] = seg[v]

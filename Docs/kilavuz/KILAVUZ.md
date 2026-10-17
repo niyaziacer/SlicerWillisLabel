@@ -64,6 +64,7 @@ Willis halkası en iyi alttan (**inferior**) görünür. 3B pencerenin üst şer
 Bu yolda modül yalnızca geometriyi yapar; adları anatomist verir. TopCoW ve Docker gerekmez.
 
 1. **2. Branches and names** bölümünde **Split into branches**'e basın. Damar ağacı çatallanma noktalarından kesilir; her dal bir numara ve renk alır ("Branch 37" gibi). Bir olgu birkaç saniye sürer.
+   İnce bir yan dal (çıktığı damarın kalınlığının en fazla 0,65 katı) ana gövdeyi kesmez: BA ya da ICA küçük dallarını geçerek tek parça kalır ve gerçek çatalında (P1'ler; MCA/ACA) biter.
 2. **Name** kutusundan adı seçin (listede yoksa yazın), **Name branch**'e basın ve dala tıklayın. Tıklama kipi açık kalır: aynı adı birden çok dala art arda verebilirsiniz. Başka ada geçmek için kutudan yeni adı seçmeniz yeter; durdurmak için Esc ya da sağ tık.
 3. Aynı adı alan dallar tek segmentte birleşir (örneğin MCA'nın gövdesi ve dalları). Yanlış adlandırdıysanız **Undo**, ya da dala "(unnamed)" verin.
 4. Kafatası dışındaki parçalara `ECA R/L`, yağ dokusuna `Non-vascular?` adını verebilirsiniz.
