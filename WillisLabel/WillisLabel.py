@@ -121,7 +121,11 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             "Make a clean segmentation with only the branches you named, one segment per artery with its "
             "anatomical name (e.g. 'A. basilaris [BA]'). Unnamed branches are left out. The numbered "
             "branches stay hidden, so you can go back and name more, then press this again.")
-        f.addRow(self.finishButton)
+        self.showAllButton = qt.QPushButton("Show all branches")
+        self.showAllButton.toolTip = ("Back to the numbered branches (the named segmentation is hidden, not deleted). "
+                                      "Name more branches, then press 'Keep named arteries only' again.")
+        row2 = qt.QHBoxLayout(); row2.addWidget(self.finishButton); row2.addWidget(self.showAllButton)
+        f.addRow(row2)
         self.topcowSelector = slicer.qMRMLNodeComboBox()
         self.topcowSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode"]
         self.topcowSelector.addEnabled = False; self.topcowSelector.noneEnabled = True
@@ -254,6 +258,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.nameUndoButton.connect("clicked()", self.onNameUndo)
         self.volButton.connect("clicked()", self.onVolumeTable)
         self.finishButton.connect("clicked()", self.onKeepNamed)
+        self.showAllButton.connect("clicked()", self.onShowAll)
         self.suggestNamesButton.connect("clicked()", self.onSuggestNames)
         self.topcowRunButton.connect("clicked()", self.onRunTopCoW)
         self.undoButton.connect("clicked()", self.onUndoCorrection)
@@ -424,6 +429,13 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
                 pass
             self.branchText.appendPlainText(
                 f"'{node.GetName()}': {len(names)} arteries, unnamed branches left out:\n  " + "\n  ".join(names))
+
+    def onShowAll(self):
+        if not getattr(self.logic, "bstate", None):
+            return
+        self.logic.showBranches()
+        self.branchText.appendPlainText("All numbered branches shown again. Name more branches, then press "
+                                        "'Keep named arteries only' to update the named segmentation.")
 
     def onSuggestNames(self):
         tc = self.topcowSelector.currentNode()
@@ -663,6 +675,11 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         else:
             st["name"][b] = abbr
         self._refresh([old, self._segmentOf(b)])
+        if st.get("namedView"):   # keep the named view up to date while naming / undoing in it
+            if any(not a.endswith(" ?") for a in st["name"].values()):
+                self.keepNamed()
+            else:
+                self.showBranches()
 
     def nameBranchAt(self, ras, abbr):
         st = getattr(self, "bstate", None)
@@ -735,7 +752,16 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         node.CreateClosedSurfaceRepresentation()
         st["seg"].GetDisplayNode().SetVisibility(False)
         st["named"] = node
+        st["namedView"] = True
         return node, names
+
+    def showBranches(self):
+        st = self.bstate
+        st["namedView"] = False
+        st["seg"].GetDisplayNode().SetVisibility(True)
+        named = st.get("named")
+        if named is not None and slicer.mrmlScene.GetNodeByID(named.GetID()) is not None:
+            named.GetDisplayNode().SetVisibility(False)
 
     def suggestNames(self, topcowNode):
         st = self.bstate
