@@ -130,6 +130,39 @@ def _split_piece(piece, spacing, si_axis, step_mm, min_branch_mm, side_ratio=0.6
 
 
 UNNAMED = "(unnamed)"
+REMOVED = "(remove)"      # a branch given this name is left out of every output (undo restores it)
+
+
+def scalp_depth(image, spacing, si_axis=0, frac=0.08):
+    """Depth (mm) of every voxel below the skin, measured within each axial slice.
+
+    The head is the image above frac x its 99th percentile, closed and hole-filled slice by slice; the
+    depth is the in-plane distance to its outline. Measured per slice so the top and bottom of the slab
+    do not count as skin. Extracranial arteries (superficial temporal, occipital) lie a few mm deep,
+    intracranial ones at least ~15 mm (scalp + skull + CSF)."""
+    image = np.asarray(image, np.float32)
+    head = image > frac * np.percentile(image, 99)
+    insp = [float(s) for i, s in enumerate(spacing) if i != si_axis]
+    depth = np.zeros(image.shape, np.float32)
+    for z in range(image.shape[si_axis]):
+        sl = np.take(head, z, axis=si_axis)
+        sl = ndi.binary_fill_holes(ndi.binary_closing(sl, iterations=3))
+        lab, n = ndi.label(sl)
+        if n:
+            sl = lab == (np.argmax(np.bincount(lab.ravel())[1:]) + 1)
+        idx = [slice(None)] * 3
+        idx[si_axis] = z
+        depth[tuple(idx)] = ndi.distance_transform_edt(sl, sampling=insp)
+    return depth
+
+
+def outer_branches(lab, depth, max_depth_mm=12.0, skip=()):
+    """Branch numbers whose median depth below the skin is under max_depth_mm (skip: numbers to keep)."""
+    n = int(lab.max())
+    if n == 0:
+        return []
+    med = ndi.median(depth, lab, index=np.arange(1, n + 1))
+    return [b for b in range(1, n + 1) if med[b - 1] < max_depth_mm and b not in skip]
 
 
 def branch_id(b):

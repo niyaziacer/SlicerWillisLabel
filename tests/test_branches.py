@@ -57,3 +57,14 @@ def test_side_ratio_zero_cuts_trunk_at_every_bifurcation():
     m = trunk_with_side_branch()
     lab, n = branches.split_branches(m, (1, 1, 1), si_axis=0, side_ratio=0)
     assert lab[5, 30, 30] != lab[50, 30, 30]
+
+
+def test_outer_branches_finds_scalp_vessel_only():
+    kk, jj, ii = np.mgrid[0:20, 0:80, 0:80]
+    image = (((jj - 40) ** 2 + (ii - 40) ** 2) <= 35 ** 2).astype(np.float32) * 100   # head: disc of r = 35
+    lab = np.zeros(image.shape, np.int32)
+    lab[:, 40, 7:9] = 1      # 2-3 mm under the skin (scalp artery)
+    lab[:, 40, 38:41] = 2    # centre of the head
+    depth = branches.scalp_depth(image, (1, 1, 1), si_axis=0)
+    assert branches.outer_branches(lab, depth, 12) == [1]
+    assert branches.outer_branches(lab, depth, 12, skip={1}) == []

@@ -34,6 +34,7 @@ Side branches that received no seed are not merged into their parent trunk. They
 3. **Name branch**: choose a name and click on a branch. Branches given the same name are merged into one segment. Unnamed branches stay numbered. Every naming is logged on the segmentation node (`WillisLabel.names`).
 4. Optional **Suggest names from TopCoW**: branches lying mostly inside a TopCoW class get that name as a pale suggestion (`MCA R ?`); a name given by the user is never overwritten.
 5. **Keep named arteries only**: makes a clean segmentation (`<volume> – named arteries`) with one segment per named artery, called by its anatomical name (e.g. `A. basilaris [BA]`); unnamed branches are left out. It is opened in Segment Editor and used for STL export. The numbered branches stay hidden; **Show all branches** brings them back to name more (or undo), then press it again. Naming or undoing while the named view is shown updates it directly.
+6. **Remove scalp branches**: unnamed branches whose median depth under the skin (measured slice by slice) is less than the set value (default 12 mm) are removed: superficial temporal, occipital and other extracranial arteries. Named branches are never touched; Undo restores them. Deeper extracranial pieces (e.g. under the temporal muscle) can be removed one by one by naming them `(remove)`. On IXI002 the default removed 22 branches (about 3 cm³) and none of the TopCoW-labelled vessels.
 
 No TopCoW model or Docker is needed for this workflow. The automatic naming described below remains available as an advanced option.
 

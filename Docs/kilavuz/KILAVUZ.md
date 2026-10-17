@@ -71,6 +71,7 @@ Bu yolda modül yalnızca geometriyi yapar; adları anatomist verir. TopCoW ve D
 5. Yalnızca ilgilendiğiniz dalları adlandırın; geri kalanlar numaralı kalır. **Volume table** adlandırılmış damarların ve adsız dalların toplam hacmini verir.
 6. İsteğe bağlı: TopCoW dosyanız varsa (**Load file…** ya da **Run TopCoW…**), **Suggest names from TopCoW** büyük damarlar için soluk renkli öneriler koyar (`MCA R ?` gibi). Öneriyi siz aynı adla adlandırdığınızda kesinleşir; modül sizin verdiğiniz bir adı hiçbir zaman değiştirmez.
 7. Adlandırma bitince **Keep named arteries only**'e basın. Yalnızca adlandırdığınız damarları içeren temiz bir segmentasyon oluşur (`<görüntü adı> – named arteries`); her damar anatomik adıyla listelenir (`A. basilaris [BA]` gibi), isimsiz dallar dışarıda kalır. Bu segmentasyon Segment Editor'da açılır ve STL dışa aktarımında kullanılır. Numaralı dallar gizlenir ama silinmez: **Show all branches** ile geri gelirler; yeni dal adlandırıp ya da **Undo** yapıp düğmeye tekrar basabilirsiniz. Temiz görünümdeyken yaptığınız adlandırma ve Undo da segmentasyonu hemen günceller.
+8. **Remove scalp branches** deri altındaki isimsiz dalları kaldırır (yüzeysel temporal, oksipital arterler gibi): deriden derinliği (her kesitte ayrı ölçülür) yanındaki değerden (varsayılan 12 mm) az olan dallar. Adlandırdığınız dallara dokunmaz; **Undo** geri getirir. Temporal kasın altındaki gibi daha derin kafa dışı parçaları tek tek kaldırmak için onlara `(remove)` adını verin.
 
 Her adlandırma segmentasyonun içinde kayıt olarak saklanır (`WillisLabel.names`).
 

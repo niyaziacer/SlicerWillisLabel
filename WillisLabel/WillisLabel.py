@@ -107,7 +107,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.nameCombo = qt.QComboBox(); self.nameCombo.editable = True
         for abbr, latin, *_ in anatomy.ARTERIES:
             self.nameCombo.addItem(f"{abbr}  –  {latin}", abbr)
-        for abbr in ("ECA R", "ECA L", anatomy.NON_VASCULAR[0], branches.UNNAMED):
+        for abbr in ("ECA R", "ECA L", anatomy.NON_VASCULAR[0], branches.UNNAMED, branches.REMOVED):
             self.nameCombo.addItem(abbr, abbr)
         f.addRow("Name:", self.nameCombo)
         row = qt.QHBoxLayout()
@@ -126,6 +126,17 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
                                       "Name more branches, then press 'Keep named arteries only' again.")
         row2 = qt.QHBoxLayout(); row2.addWidget(self.finishButton); row2.addWidget(self.showAllButton)
         f.addRow(row2)
+        row3 = qt.QHBoxLayout()
+        self.outerButton = qt.QPushButton("Remove scalp branches")
+        self.outerButton.toolTip = (
+            "Remove the unnamed branches lying just under the skin (superficial temporal, occipital and other "
+            "extracranial arteries): median depth below the skin smaller than the value at the right, measured "
+            "slice by slice. Named branches are never removed. Undo restores them. Single pieces can also be "
+            "removed by naming them '(remove)'.")
+        self.outerDepth = qt.QDoubleSpinBox(); self.outerDepth.setRange(3.0, 40.0); self.outerDepth.setValue(12.0)
+        self.outerDepth.setSuffix(" mm"); self.outerDepth.setToolTip("Depth below the skin (intracranial vessels are deeper than ~15 mm)")
+        row3.addWidget(self.outerButton, 1); row3.addWidget(self.outerDepth)
+        f.addRow(row3)
         self.topcowSelector = slicer.qMRMLNodeComboBox()
         self.topcowSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode"]
         self.topcowSelector.addEnabled = False; self.topcowSelector.noneEnabled = True
@@ -259,6 +270,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.volButton.connect("clicked()", self.onVolumeTable)
         self.finishButton.connect("clicked()", self.onKeepNamed)
         self.showAllButton.connect("clicked()", self.onShowAll)
+        self.outerButton.connect("clicked()", self.onRemoveOuter)
         self.suggestNamesButton.connect("clicked()", self.onSuggestNames)
         self.topcowRunButton.connect("clicked()", self.onRunTopCoW)
         self.undoButton.connect("clicked()", self.onUndoCorrection)
@@ -429,6 +441,13 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
                 pass
             self.branchText.appendPlainText(
                 f"'{node.GetName()}': {len(names)} arteries, unnamed branches left out:\n  " + "\n  ".join(names))
+
+    def onRemoveOuter(self):
+        if not getattr(self.logic, "bstate", None):
+            slicer.util.errorDisplay("Press 'Split into branches' first.")
+            return
+        with slicer.util.tryWithErrorDisplay("Could not remove the scalp branches.", waitCursor=True):
+            self.branchText.appendPlainText(self.logic.removeOuter(self.outerDepth.value))
 
     def onShowAll(self):
         if not getattr(self.logic, "bstate", None):
@@ -662,6 +681,8 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             if abbr is None:
                 b = int(sid.split()[-1])
                 self._writeBranchSegment(sid, (st["lab"] == b) if b not in st["name"] else np.zeros(1, bool), None, b)
+            elif abbr == branches.REMOVED:
+                continue   # removed branches get no segment
             else:
                 bs = [b for b, a in st["name"].items() if a == abbr]
                 self._writeBranchSegment(sid, np.isin(st["lab"], bs) if bs else np.zeros(1, bool), abbr)
@@ -676,7 +697,7 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
             st["name"][b] = abbr
         self._refresh([old, self._segmentOf(b)])
         if st.get("namedView"):   # keep the named view up to date while naming / undoing in it
-            if any(not a.endswith(" ?") for a in st["name"].values()):
+            if any(not a.endswith(" ?") and a != branches.REMOVED for a in st["name"].values()):
                 self.keepNamed()
             else:
                 self.showBranches()
@@ -704,9 +725,39 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         st = getattr(self, "bstate", None)
         if not st or not st["undo"]:
             return "Nothing to undo."
-        b, before = st["undo"].pop()
+        entry = st["undo"].pop()
+        if isinstance(entry[0], str):   # ("batch", [(branch, previous name), ...])
+            items = entry[1]
+            for b, before in items:
+                if before is None:
+                    st["name"].pop(b, None)
+                else:
+                    st["name"][b] = before
+            self._refresh([(branches.branch_id(b), None) for b, _ in items])
+            return f"Undo: {len(items)} removed branches restored"
+        b, before = entry
         self._setName(b, before)
         return f"Undo: branch {b} -> {before or 'unnamed'}"
+
+    def removeOuter(self, max_depth_mm=12.0):
+        """Remove (name '(remove)') the unnamed branches lying less than max_depth_mm under the skin."""
+        st = self.bstate
+        if "depth" not in st:
+            image = slicer.util.arrayFromVolume(st["vol"])
+            st["depth"] = branches.scalp_depth(image, st["spacing"], si_axis=self._siAxisKJI(st["vol"]))
+        bs = branches.outer_branches(st["lab"], st["depth"], max_depth_mm, skip=set(st["name"]))
+        if not bs:
+            return f"No unnamed branch lies less than {max_depth_mm:.0f} mm under the skin."
+        for b in bs:
+            st["name"][b] = branches.REMOVED
+        st["undo"].append(("batch", [(b, None) for b in bs]))
+        self._refresh([(branches.branch_id(b), None) for b in bs])
+        mm3 = float(np.isin(st["lab"], bs).sum() * np.prod(st["spacing"]))
+        line = (f"Removed {len(bs)} scalp branches ({mm3:.0f} mm³) less than {max_depth_mm:.0f} mm under the skin. "
+                "Undo restores them.")
+        st["log"].append(line)
+        st["seg"].SetAttribute("WillisLabel.names", "\n".join(st["log"]))
+        return line
 
     def volumeTable(self):
         st = self.bstate
@@ -731,7 +782,7 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         old = st.get("named")
         if old is not None and slicer.mrmlScene.GetNodeByID(old.GetID()) is not None:
             slicer.mrmlScene.RemoveNode(old)
-        abbrs = sorted({a for a in st["name"].values() if not a.endswith(" ?")})
+        abbrs = sorted({a for a in st["name"].values() if not a.endswith(" ?") and a != branches.REMOVED})
         if not abbrs:
             raise ValueError("No branch has been named yet.")
         node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", nodeName)
