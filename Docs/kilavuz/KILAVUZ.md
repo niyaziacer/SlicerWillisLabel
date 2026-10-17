@@ -69,6 +69,7 @@ Bu yolda modül yalnızca geometriyi yapar; adları anatomist verir. TopCoW ve D
 4. Kafatası dışındaki parçalara `ECA R/L`, yağ dokusuna `Non-vascular?` adını verebilirsiniz.
 5. Yalnızca ilgilendiğiniz dalları adlandırın; geri kalanlar numaralı kalır. **Volume table** adlandırılmış damarların ve adsız dalların toplam hacmini verir.
 6. İsteğe bağlı: TopCoW dosyanız varsa (**Load file…** ya da **Run TopCoW…**), **Suggest names from TopCoW** büyük damarlar için soluk renkli öneriler koyar (`MCA R ?` gibi). Öneriyi siz aynı adla adlandırdığınızda kesinleşir; modül sizin verdiğiniz bir adı hiçbir zaman değiştirmez.
+7. Adlandırma bitince **Keep named arteries only**'e basın. Yalnızca adlandırdığınız damarları içeren temiz bir segmentasyon oluşur (`<görüntü adı> – named arteries`); her damar anatomik adıyla listelenir (`A. basilaris [BA]` gibi), isimsiz dallar dışarıda kalır. Bu segmentasyon Segment Editor'da açılır ve STL dışa aktarımında kullanılır. Numaralı dallar gizlenir ama silinmez: yeni dal adlandırıp düğmeye tekrar basabilirsiniz.
 
 Her adlandırma segmentasyonun içinde kayıt olarak saklanır (`WillisLabel.names`).
 

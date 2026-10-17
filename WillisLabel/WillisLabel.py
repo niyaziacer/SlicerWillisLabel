@@ -116,6 +116,12 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.volButton = qt.QPushButton("Volume table")
         row.addWidget(self.nameButton); row.addWidget(self.nameUndoButton); row.addWidget(self.volButton)
         f.addRow(row)
+        self.finishButton = qt.QPushButton("Keep named arteries only")
+        self.finishButton.toolTip = (
+            "Make a clean segmentation with only the branches you named, one segment per artery with its "
+            "anatomical name (e.g. 'A. basilaris [BA]'). Unnamed branches are left out. The numbered "
+            "branches stay hidden, so you can go back and name more, then press this again.")
+        f.addRow(self.finishButton)
         self.topcowSelector = slicer.qMRMLNodeComboBox()
         self.topcowSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode"]
         self.topcowSelector.addEnabled = False; self.topcowSelector.noneEnabled = True
@@ -247,6 +253,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.nameButton.connect("clicked()", self.onNameBranch)
         self.nameUndoButton.connect("clicked()", self.onNameUndo)
         self.volButton.connect("clicked()", self.onVolumeTable)
+        self.finishButton.connect("clicked()", self.onKeepNamed)
         self.suggestNamesButton.connect("clicked()", self.onSuggestNames)
         self.topcowRunButton.connect("clicked()", self.onRunTopCoW)
         self.undoButton.connect("clicked()", self.onUndoCorrection)
@@ -401,6 +408,22 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
     def onVolumeTable(self):
         with slicer.util.tryWithErrorDisplay("Could not compute volumes.", waitCursor=True):
             self.branchText.appendPlainText(self.logic.volumeTable())
+
+    def onKeepNamed(self):
+        if not getattr(self.logic, "bstate", None):
+            slicer.util.errorDisplay("Press 'Split into branches' and name some branches first.")
+            return
+        with slicer.util.tryWithErrorDisplay("Could not make the named segmentation.", waitCursor=True):
+            node, names = self.logic.keepNamed()
+            self.labelSegNode = node   # export uses the clean segmentation
+            try:   # open it in Segment Editor's selectors (visible when the user switches there)
+                ed = slicer.modules.segmenteditor.widgetRepresentation().self().editor
+                ed.setSegmentationNode(node)
+                ed.setSourceVolumeNode(self.logic.bstate["vol"])
+            except Exception:
+                pass
+            self.branchText.appendPlainText(
+                f"'{node.GetName()}': {len(names)} arteries, unnamed branches left out:\n  " + "\n  ".join(names))
 
     def onSuggestNames(self):
         tc = self.topcowSelector.currentNode()
@@ -682,6 +705,37 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         un = [b for b in range(1, st["n"] + 1) if b not in st["name"]]
         lines.append(f"(unnamed)\t{sum(vols[b] for b in un):.0f}\t{len(un)}")
         return "\n".join(lines)
+
+    def keepNamed(self):
+        """Clean segmentation: one segment per confirmed name (suggestions '<x> ?' and unnamed left out).
+        Re-pressing replaces the previous clean node. Returns (node, list of segment names)."""
+        st = self.bstate
+        nodeName = st["vol"].GetName() + " – named arteries"
+        old = st.get("named")
+        if old is not None and slicer.mrmlScene.GetNodeByID(old.GetID()) is not None:
+            slicer.mrmlScene.RemoveNode(old)
+        abbrs = sorted({a for a in st["name"].values() if not a.endswith(" ?")})
+        if not abbrs:
+            raise ValueError("No branch has been named yet.")
+        node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", nodeName)
+        node.SetReferenceImageGeometryParameterFromVolumeNode(st["vol"])
+        node.CreateDefaultDisplayNodes()
+        segmentation = node.GetSegmentation()
+        names = []
+        for i, a in enumerate(abbrs):
+            bs = [b for b, x in st["name"].items() if x == a]
+            name = anatomy.segment_name(a)
+            col = anatomy.NON_VASCULAR[2] if a == anatomy.NON_VASCULAR[0] else anatomy.colour(a, i)
+            sid = segmentation.AddEmptySegment(a, name)
+            segmentation.GetSegment(sid).SetColor(*col)
+            slicer.util.updateSegmentBinaryLabelmapFromArray(
+                np.isin(st["lab"], bs).astype(np.uint8), node, sid, st["vol"])
+            names.append(name)
+        node.SetAttribute("WillisLabel.names", "\n".join(st["log"]))
+        node.CreateClosedSurfaceRepresentation()
+        st["seg"].GetDisplayNode().SetVisibility(False)
+        st["named"] = node
+        return node, names
 
     def suggestNames(self, topcowNode):
         st = self.bstate

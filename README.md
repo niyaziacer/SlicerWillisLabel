@@ -33,6 +33,7 @@ Side branches that received no seed are not merged into their parent trunk. They
 2. **Split into branches**: the artery tree is cut at its bifurcations (voxel coding on the geodesic distance from the inflow vessels, no skeleton library); every branch gets a number and a colour. Loops such as the circle of Willis are handled.
 3. **Name branch**: choose a name and click on a branch. Branches given the same name are merged into one segment. Unnamed branches stay numbered. Every naming is logged on the segmentation node (`WillisLabel.names`).
 4. Optional **Suggest names from TopCoW**: branches lying mostly inside a TopCoW class get that name as a pale suggestion (`MCA R ?`); a name given by the user is never overwritten.
+5. **Keep named arteries only**: makes a clean segmentation (`<volume> – named arteries`) with one segment per named artery, called by its anatomical name (e.g. `A. basilaris [BA]`); unnamed branches are left out. It is opened in Segment Editor and used for STL export. The numbered branches stay hidden, so you can name more and press it again.
 
 No TopCoW model or Docker is needed for this workflow. The automatic naming described below remains available as an advanced option.
 
