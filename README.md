@@ -49,6 +49,39 @@ A multiclass circle-of-Willis segmentation from a [TopCoW](https://topcow24.gran
 
 The TopCoW models are not distributed with this extension. They are published by the TopCoW organisers as Docker images ([Zenodo 15665435](https://zenodo.org/records/15665435)). If you use them, please cite the TopCoW challenge paper ([arXiv:2312.17670](https://arxiv.org/abs/2312.17670)).
 
+### Running TopCoW inside Slicer (no Docker)
+
+**Run TopCoW…** runs the TopCoW 2024 DKFZ model directly in Slicer with nnU-Net v2; Docker is not needed to run it.
+
+1. **TopCoW model folder.** Until the weights are published separately, copy them once out of the DKFZ Docker image (needs Docker only for this step):
+   ```powershell
+   docker image load -i Team_DKFZ_topcow_seg.tar.gz
+   docker create --name tcx topcow24_ct:latest
+   docker cp tcx:/opt/app/_trained_model "$HOME\TopCoW_DKFZ_model"
+   docker rm tcx
+   ```
+   The folder contains `dataset.json`, `plans.json` and `fold_0` … `fold_4` (about 1.2 GB). Choose it in **TopCoW model**.
+2. On first use the extension installs PyTorch (through the *PyTorch* extension, which must be installed) and `nnunetv2==2.5.1`. This needs internet and several GB of disk space.
+   **NVIDIA GPU:** the PyTorch extension may install the CPU-only build. TopCoW then still works but takes 15–30 minutes instead of about 2. Check in the Python Console (*View → Python Console*):
+   ```python
+   import torch; print(torch.__version__, torch.cuda.is_available())
+   ```
+   If the version ends in `+cpu` or the result is `False`, install the CUDA build and restart Slicer:
+   ```python
+   slicer.util.pip_uninstall("torch torchvision torchaudio")
+   import PyTorchUtils
+   PyTorchUtils.PyTorchUtilsLogic().installTorch(askConfirmation=True, forceComputationBackend="cu124")
+   ```
+   `cu124` (CUDA 12.4) works with current NVIDIA drivers (tested on an RTX 40-series laptop: `torch 2.6.0+cu124`). Without an NVIDIA GPU, keep the CPU build. After a run on the CPU the extension prints a note in the result panel.
+3. The TOF is reoriented to LPS, segmented and the result is saved next to the TOF as `<name>_TopCoW.mha`.
+
+Notes:
+- The checkpoints were trained with the trainer `nnUNetTrainerSkeletonRecallNoMirroring`, which is not part of standard nnU-Net, so the usual nnU-Net loader cannot open them. The extension builds the standard network from `plans.json` and loads the weights directly. With nnunetv2 2.5.1 the result was voxel-identical to the output of the official TopCoW Docker image (IXI002, 5-fold ensemble, all 13 classes).
+- The model resamples the image to 0.35 × 0.35 × 0.6 mm. On a laptop RTX 40-series GPU, IXI002 took 111 s with all 5 folds and 46 s with **1 fold (fast preview)**.
+- 1 fold agrees with the 5-fold ensemble for the large vessels (Dice 0.94–0.99) but not for the small ones (L-PComA 0.81, AComA 0.68, 3rd A2 0.16 on IXI002). Use 5 folds for variation studies.
+- The model writes the third A2 as class 13; it is renumbered to the TopCoW value 15.
+- Licence of the weights: the Docker image contains an Apache-2.0 licence from DKFZ; permission for use in this extension has been requested from the TopCoW organisers.
+
 ## Faint distal branches
 
 On TOF the signal of distal branches fades (in-plane saturation), so a branch can break into pieces that are not connected to the seeded tree. With *Connect faint distal branches* (on by default) each thin isolated piece is joined to the tree along its brightest route, if the new part is at most 25 mm long and brighter than 0.75 × the mask's low intensity. Thick isolated pieces (usually fat) are not joined. On IXI002 this doubled the labelled arterial volume more than 40 mm behind the AComA (515 → 988 mm³).

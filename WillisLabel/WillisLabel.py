@@ -13,7 +13,9 @@ from slicer.ScriptedLoadableModule import (
     ScriptedLoadableModuleTest,
 )
 
-from WillisLabelLib import aca, anatomy, branches, core, sca, topcow
+from WillisLabelLib import aca, anatomy, branches, core, sca, topcow, topcow_infer
+
+SETTINGS_MODEL_DIR = "WillisLabel/TopCoWModelDir"
 
 
 #
@@ -151,11 +153,25 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.topcowLoadButton.toolTip = ("Load a TopCoW output (.mha / .nii.gz) as a label map and select it here")
         tcRow.addWidget(self.topcowLoadButton)
         self.topcowRunButton = qt.QPushButton("Run TopCoW…")
-        self.topcowRunButton.toolTip = ("Run the TopCoW model (Docker image topcow24_ct:latest) on the selected TOF. "
+        self.topcowRunButton.toolTip = ("Run the TopCoW DKFZ model on the selected TOF inside Slicer (no Docker). "
                                         "The result is saved next to the TOF as <name>_TopCoW.mha and selected here. "
-                                        "Takes about 2 minutes with an NVIDIA GPU.")
+                                        "About 2 minutes with an NVIDIA GPU (5 folds); much slower on the CPU.")
         tcRow.addWidget(self.topcowRunButton)
         f.addRow("TopCoW (optional):", tcRow)
+        mdRow = qt.QHBoxLayout()
+        self.topcowModelPath = ctk.ctkPathLineEdit()
+        self.topcowModelPath.filters = ctk.ctkPathLineEdit.Dirs
+        self.topcowModelPath.settingKey = SETTINGS_MODEL_DIR
+        self.topcowModelPath.toolTip = (
+            "Folder of the TopCoW DKFZ model (_trained_model): dataset.json, plans.json, fold_0 ... fold_4. "
+            "See the README for how to copy it out of the TopCoW Docker image.")
+        mdRow.addWidget(self.topcowModelPath, 1)
+        self.topcowFastCheck = qt.QCheckBox("1 fold (fast preview)")
+        self.topcowFastCheck.toolTip = (
+            "Use only fold 0 instead of the 5-fold ensemble: about 2.5x faster, but small vessels (AComA, PComA) "
+            "and the 3rd A2 can be missed. Not recommended for variation studies.")
+        mdRow.addWidget(self.topcowFastCheck)
+        f.addRow("TopCoW model:", mdRow)
         self.suggestNamesButton = qt.QPushButton("Suggest names from TopCoW (optional)")
         self.suggestNamesButton.toolTip = ("Branches lying mostly inside a TopCoW class get that name as a suggestion "
                                            "(shown as '<name> ?'). Confirm by naming the branch yourself.")
@@ -423,6 +439,9 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             self.branchText.appendPlainText(self.logic.undoName())
 
     def onVolumeTable(self):
+        if not getattr(self.logic, "bstate", None):
+            slicer.util.errorDisplay("Press 'Split into branches' first.")
+            return
         with slicer.util.tryWithErrorDisplay("Could not compute volumes.", waitCursor=True):
             self.branchText.appendPlainText(self.logic.volumeTable())
 
@@ -457,6 +476,10 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
                                         "'Keep named arteries only' to update the named segmentation.")
 
     def onSuggestNames(self):
+        if not getattr(self.logic, "bstate", None):
+            slicer.util.errorDisplay("Suggestions are given per branch: press 'Extract arteries' and "
+                                     "'Split into branches' first, then 'Suggest names from TopCoW'.")
+            return
         tc = self.topcowSelector.currentNode()
         if tc is None:
             slicer.util.errorDisplay("Load a TopCoW file (Load file…) or run TopCoW first.")
@@ -469,12 +492,26 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         if vol is None:
             slicer.util.errorDisplay("Select the TOF volume first.")
             return
-        if not slicer.util.confirmOkCancelDisplay(
-                f"Run TopCoW on '{vol.GetName()}'?\n\nDocker Desktop must be running. Slicer will not respond "
-                "for about 2 minutes (GPU) or longer (CPU)."):
+        modelDir = self.topcowModelPath.currentPath
+        problems = topcow_infer.check_model_dir(modelDir)
+        if problems:
+            slicer.util.errorDisplay("Choose the TopCoW model folder first (TopCoW model).\n\n"
+                                     + "\n".join(problems) + "\n\nSee the README: 'TopCoW model folder'.")
             return
+        folds = [0] if self.topcowFastCheck.checked else None
+        if not slicer.util.confirmOkCancelDisplay(
+                f"Run TopCoW on '{vol.GetName()}' ({'1 fold' if folds else '5 folds'})?\n\n"
+                "On first use PyTorch and nnU-Net are installed (several GB, needs internet). "
+                "Slicer will not respond for about 1-2 minutes with an NVIDIA GPU, much longer on the CPU."):
+            return
+        self.topcowModelPath.addCurrentPathToHistory()
         with slicer.util.tryWithErrorDisplay("TopCoW failed.", waitCursor=True):
-            node, path, secs = self.logic.runTopCoW(vol)
+            node, path, secs = self.logic.runTopCoW(vol, modelDir, folds)
+            import torch
+            if not torch.cuda.is_available():
+                self.resultText.appendPlainText(
+                    "Note: TopCoW ran on the CPU (PyTorch has no CUDA support here), which is much slower. "
+                    "To use the NVIDIA GPU, reinstall PyTorch with CUDA in the 'PyTorch Utils' module.")
             self.topcowSelector.setCurrentNode(node)
             self.resultText.appendPlainText(f"TopCoW finished in {secs:.0f} s, saved to {path}")
 
@@ -839,45 +876,57 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         self._refresh(sorted(sids, key=lambda x: (x[1] is None, x[0])))
         return f"{cnt} branches got a suggested name ('<name> ?'). Confirm or correct them with 'Name branch'."
 
-    def runTopCoW(self, volumeNode, image="topcow24_ct:latest", useGpu=True):
-        """Run the TopCoW Docker model on a TOF volume. Returns (labelmap node, saved path, seconds)."""
+    def ensureTopCoWDependencies(self):
+        """Install PyTorch (via the PyTorch extension) and nnU-Net v2 on first use."""
+        try:
+            import torch  # noqa: F401
+        except ImportError:
+            try:
+                import PyTorchUtils
+            except ImportError:
+                raise RuntimeError("PyTorch is needed. Install the 'PyTorch' extension from the Extensions "
+                                   "Manager, restart Slicer and try again.")
+            torchLogic = PyTorchUtils.PyTorchUtilsLogic()
+            if not torchLogic.torchInstalled():
+                torch = torchLogic.installTorch(askConfirmation=True)
+                if torch is None:
+                    raise RuntimeError("PyTorch was not installed.")
+        try:
+            import nnunetv2
+            from importlib.metadata import version
+            if not version("nnunetv2").startswith("2.5"):
+                raise ImportError
+        except ImportError:
+            slicer.util.pip_install(topcow_infer.NNUNET_REQUIREMENT)
+
+    def runTopCoW(self, volumeNode, modelDir, folds=None):
+        """Run the TopCoW DKFZ model on a TOF volume inside Slicer (no Docker).
+
+        Returns (labelmap node, saved path, seconds).
+        """
         import shutil
-        import subprocess
+        import tempfile
         import SimpleITK as sitk
         import sitkUtils
-        if shutil.which("docker") is None:
-            raise RuntimeError("Docker was not found. Install Docker Desktop and load the TopCoW image (see guide).")
         t0 = time.time()
-        work = os.path.join(os.path.expanduser("~"), "WillisLabel_TopCoW", volumeNode.GetName())
-        indir, outdir = os.path.join(work, "in"), os.path.join(work, "out")
-        shutil.rmtree(work, ignore_errors=True)
-        for sub in ("head-mr-angio", "head-ct-angio"):
-            os.makedirs(os.path.join(indir, "images", sub))
-        os.makedirs(outdir)
-        img = sitk.DICOMOrient(sitkUtils.PullVolumeFromSlicer(volumeNode), "LPS")  # the model expects LPS
-        for sub in ("head-mr-angio", "head-ct-angio"):
-            sitk.WriteImage(img, os.path.join(indir, "images", sub, "tof.nii.gz"))
-
-        def run(gpu):
-            cmd = ["docker", "run", "--rm", "--network", "none", "--shm-size=8g"]
-            if gpu:
-                cmd += ["--gpus", "all"]
-            cmd += ["-v", f"{indir}:/input:ro", "-v", f"{outdir}:/output", image]
-            return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-
-        r = run(useGpu)
-        result = os.path.join(outdir, "images", "cow-multiclass-segmentation", "output.mha")
-        if not os.path.exists(result) and useGpu:
-            r = run(False)  # no NVIDIA GPU: try on the CPU (slow, not validated)
-        if not os.path.exists(result):
-            raise RuntimeError("TopCoW produced no output.\n" + (r.stderr or r.stdout)[-1500:])
-        sn = volumeNode.GetStorageNode()
-        folder = os.path.dirname(sn.GetFileName()) if sn and sn.GetFileName() else work
-        saved = os.path.join(folder, volumeNode.GetName() + "_TopCoW.mha")
+        self.ensureTopCoWDependencies()
+        work = tempfile.mkdtemp(prefix="WillisLabel_TopCoW_")
         try:
-            shutil.copyfile(result, saved)
-        except OSError:
-            saved = result
+            src = os.path.join(work, "tof.nii.gz")
+            img = sitk.DICOMOrient(sitkUtils.PullVolumeFromSlicer(volumeNode), "LPS")  # the model expects LPS
+            sitk.WriteImage(img, src)
+            predictor = topcow_infer.build_predictor(modelDir, folds)
+            result = topcow_infer.predict_file(predictor, src, os.path.join(work, "output.mha"))
+            sn = volumeNode.GetStorageNode()
+            folder = os.path.dirname(sn.GetFileName()) if sn and sn.GetFileName() else os.path.expanduser("~")
+            saved = os.path.join(folder, volumeNode.GetName() + "_TopCoW.mha")
+            try:
+                shutil.copyfile(result, saved)
+            except OSError:
+                saved = os.path.join(os.path.expanduser("~"), volumeNode.GetName() + "_TopCoW.mha")
+                shutil.copyfile(result, saved)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
         node = slicer.util.loadLabelVolume(saved)
         node.SetName(volumeNode.GetName() + "_TopCoW")
         return node, saved, time.time() - t0
