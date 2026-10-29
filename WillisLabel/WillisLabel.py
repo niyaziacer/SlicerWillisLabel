@@ -141,8 +141,11 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             "extracranial arteries): median depth below the skin smaller than the value at the right, measured "
             "slice by slice. Named branches are never removed. Undo restores them. Single pieces can also be "
             "removed by naming them '(remove)'.")
-        self.outerDepth = qt.QDoubleSpinBox(); self.outerDepth.setRange(3.0, 40.0); self.outerDepth.setValue(12.0)
-        self.outerDepth.setSuffix(" mm"); self.outerDepth.setToolTip("Depth below the skin (intracranial vessels are deeper than ~15 mm)")
+        self.outerDepth = qt.QDoubleSpinBox(); self.outerDepth.setRange(3.0, 20.0); self.outerDepth.setValue(12.0)
+        self.outerDepth.setSuffix(" mm"); self.outerDepth.setToolTip(
+            "Depth below the skin (max 20 mm). Scalp arteries lie a few mm deep; cortical MCA branches on the "
+            "lateral brain surface lie ~20-35 mm deep. Values above ~15 mm start removing real intracranial "
+            "branches. To remove deeper veins (e.g. the superior sagittal sinus) use 'Remove branch'.")
         row3.addWidget(self.removeButton); row3.addWidget(self.outerButton, 1); row3.addWidget(self.outerDepth)
         f.addRow(row3)
         self.topcowSelector = slicer.qMRMLNodeComboBox()
@@ -808,6 +811,9 @@ class WillisLabelLogic(ScriptedLoadableModuleLogic):
         mm3 = float(np.isin(st["lab"], bs).sum() * np.prod(st["spacing"]))
         line = (f"Removed {len(bs)} scalp branches ({mm3:.0f} mm³) less than {max_depth_mm:.0f} mm under the skin. "
                 "Undo restores them.")
+        if max_depth_mm > 15.0:
+            line += (" WARNING: above 15 mm this can remove real cortical branches (e.g. lateral MCA branches); "
+                     "check the result and use Undo if arteries are missing.")
         st["log"].append(line)
         st["seg"].SetAttribute("WillisLabel.names", "\n".join(st["log"]))
         return line
