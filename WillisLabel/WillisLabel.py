@@ -101,7 +101,8 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         info = qt.QLabel(
             "'Split into branches' cuts the artery tree at its bifurcations; every branch gets a number and "
             "a colour. Name a branch: choose a name, press 'Name branch' and click on the branch. "
-            "Branches given the same name are merged. Unnamed branches stay numbered.")
+            "Branches given the same name are merged. Unnamed branches stay numbered. "
+            "'Remove branch': click veins (e.g. the superior sagittal sinus) or stray pieces to remove them.")
         info.wordWrap = True
         f.addRow(info)
         self.splitButton = qt.QPushButton("Split into branches")
@@ -129,6 +130,11 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         row2 = qt.QHBoxLayout(); row2.addWidget(self.finishButton); row2.addWidget(self.showAllButton)
         f.addRow(row2)
         row3 = qt.QHBoxLayout()
+        self.removeButton = qt.QPushButton("Remove branch")
+        self.removeButton.toolTip = (
+            "Click branches in the 3D or slice views to remove them (e.g. the superior sagittal sinus or cortical "
+            "veins with inflow signal, or stray pieces). Same as naming them '(remove)': removed branches are left "
+            "out of every output and Undo restores them. Esc or right-click stops.")
         self.outerButton = qt.QPushButton("Remove scalp branches")
         self.outerButton.toolTip = (
             "Remove the unnamed branches lying just under the skin (superficial temporal, occipital and other "
@@ -137,7 +143,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             "removed by naming them '(remove)'.")
         self.outerDepth = qt.QDoubleSpinBox(); self.outerDepth.setRange(3.0, 40.0); self.outerDepth.setValue(12.0)
         self.outerDepth.setSuffix(" mm"); self.outerDepth.setToolTip("Depth below the skin (intracranial vessels are deeper than ~15 mm)")
-        row3.addWidget(self.outerButton, 1); row3.addWidget(self.outerDepth)
+        row3.addWidget(self.removeButton); row3.addWidget(self.outerButton, 1); row3.addWidget(self.outerDepth)
         f.addRow(row3)
         self.topcowSelector = slicer.qMRMLNodeComboBox()
         self.topcowSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode"]
@@ -282,6 +288,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         self.topcowLoadButton.connect("clicked()", self.onLoadTopCoW)
         self.splitButton.connect("clicked()", self.onSplit)
         self.nameButton.connect("clicked()", self.onNameBranch)
+        self.removeButton.connect("clicked()", self.onRemoveBranch)
         self.nameUndoButton.connect("clicked()", self.onNameUndo)
         self.volButton.connect("clicked()", self.onVolumeTable)
         self.finishButton.connect("clicked()", self.onKeepNamed)
@@ -400,13 +407,22 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             self.labelSegNode = seg
             self.branchText.setPlainText(f"{n} branches in {secs:.0f} s. Name the ones you need; the rest stay numbered.")
 
+    def _clickAbbr(self):
+        """Name given to a clicked branch: '(remove)' in Remove-branch mode, else the Name list choice."""
+        return getattr(self, "_forcedAbbr", None) or self._nameAbbr()
+
     def _nameAbbr(self):
         i = self.nameCombo.currentIndex; txt = self.nameCombo.currentText
         if i >= 0 and self.nameCombo.itemText(i) == txt:
             return self.nameCombo.itemData(i)
         return txt.split("  –  ")[0].strip()
 
-    def onNameBranch(self):
+    def onRemoveBranch(self):
+        """'Name branch' with the name fixed to '(remove)', whatever is chosen in the Name list."""
+        self.onNameBranch(forced=branches.REMOVED)
+
+    def onNameBranch(self, forced=None):
+        self._forcedAbbr = forced if isinstance(forced, str) else None
         if not getattr(self.logic, "bstate", None):
             slicer.util.errorDisplay("Press 'Split into branches' first.")
             return
@@ -416,7 +432,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
             self._nameNode.GetDisplayNode().SetSelectedColor(1.0, 1.0, 0.0)
             self._nameNode.GetDisplayNode().SetPointLabelsVisibility(False)
             self._nameNode.AddObserver(slicer.vtkMRMLMarkupsNode.PointPositionDefinedEvent, self._onNamePoint)
-        self._nameNode.SetControlPointLabelFormat(self._nameAbbr())
+        self._nameNode.SetControlPointLabelFormat(self._clickAbbr())
         selectionNode = slicer.app.applicationLogic().GetSelectionNode()
         selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
         selectionNode.SetActivePlaceNodeID(self._nameNode.GetID())
@@ -432,7 +448,7 @@ class WillisLabelWidget(ScriptedLoadableModuleWidget):
         caller.GetNthControlPointPositionWorld(n - 1, ras)
         caller.RemoveNthControlPoint(n - 1)   # the click is only a pointer
         with slicer.util.tryWithErrorDisplay("Naming failed.", waitCursor=True):
-            self.branchText.appendPlainText(self.logic.nameBranchAt(ras, self._nameAbbr()))
+            self.branchText.appendPlainText(self.logic.nameBranchAt(ras, self._clickAbbr()))
 
     def onNameUndo(self):
         with slicer.util.tryWithErrorDisplay("Undo failed.", waitCursor=True):
