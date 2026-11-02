@@ -80,7 +80,8 @@ Notes:
 - The model resamples the image to 0.35 × 0.35 × 0.6 mm. On a laptop RTX 40-series GPU, IXI002 took 111 s with all 5 folds and 46 s with **1 fold (fast preview)**.
 - 1 fold agrees with the 5-fold ensemble for the large vessels (Dice 0.94–0.99) but not for the small ones (L-PComA 0.81, AComA 0.68, 3rd A2 0.16 on IXI002). Use 5 folds for variation studies.
 - The model writes the third A2 as class 13; it is renumbered to the TopCoW value 15.
-- Licence of the weights: the Docker image contains an Apache-2.0 licence from DKFZ; permission for use in this extension has been requested from the TopCoW organisers.
+- Licence of the weights: the Docker image contains an Apache-2.0 licence from DKFZ. The DKFZ team (Maximilian Rokuss and colleagues) granted permission for the use of the weights in this extension on 2 November 2026, after a request through the TopCoW organisers.
+- The DKFZ team confirmed that the checkpoints run with plain nnU-Net v2 outside the container (renaming the trainer in the checkpoint to `nnUNetTrainerNoMirroring` is an alternative to the direct loading used here) and that the model uses no test-time mirroring; the extension therefore runs it without mirroring. According to them, single folds differ by about 1–3 Dice points on average; the per-vessel numbers above show that the difference is concentrated in the small communicating arteries.
 
 ## Faint distal branches
 
