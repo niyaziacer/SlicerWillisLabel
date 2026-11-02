@@ -81,7 +81,9 @@ def build_predictor(model_dir, folds=None, device=None):
     net = nnUNetTrainer.build_network_architecture(
         cm.network_arch_class_name, cm.network_arch_init_kwargs, cm.network_arch_init_kwargs_req_import,
         n_in, n_out, enable_deep_supervision=False)
-    predictor = nnUNetPredictor(tile_step_size=0.5, use_gaussian=True, use_mirroring=True,
+    # The DKFZ model was trained without mirroring (nnUNetTrainer...NoMirroring; confirmed by the DKFZ team).
+    # Mirroring at test time would also mix the left/right classes (ICA, MCA, PCA, PComA, ACA).
+    predictor = nnUNetPredictor(tile_step_size=0.5, use_gaussian=True, use_mirroring=False,
                                 perform_everything_on_device=device.type == "cuda", device=device,
                                 verbose=False, verbose_preprocessing=False, allow_tqdm=False)
     predictor.manual_initialization(net, plans, cm, params, dataset_json, trainer_name, mirror)
